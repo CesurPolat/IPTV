@@ -3,6 +3,7 @@ import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
+import { App as CapacitorApp } from '@capacitor/app';
 
 interface Channel {
   name: string;
@@ -41,6 +42,7 @@ export class AppComponent implements OnInit {
     { name: 'TLC', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/TLC_logo_%282023%29.svg/1920px-TLC_logo_%282023%29.svg.png', url: 'https://dogus.daioncdn.net/tlc/tlc.m3u8?ce=3&app=1aca0aa1-06e3-41ff-a8e5-38d7df475469' },
     { name: 'DMAX', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/DMAX_BLACK.svg/1920px-DMAX_BLACK.svg.png', url: 'https://dogus.daioncdn.net/dmax/dmax.m3u8?ce=3&app=5a02c599-d17e-4982-9b04-090934d51af7' }
   ];
+  
 
   ngOnInit() {
     this.player = videojs('my-video', {
@@ -63,6 +65,13 @@ export class AppComponent implements OnInit {
     this.selectedIndex = 0;
     this.player.play().catch(() => {
       this.showPlayIcon = true;
+    });
+
+    // Capacitor back button listener'ı ekle
+    CapacitorApp.addListener('backButton', () => {
+      // Backspace tuşuna basılmış gibi davran
+      const event = new KeyboardEvent('keydown', { key: 'Backspace' });
+      this.onBackspacePress(event);
     });
   }
 
