@@ -29,6 +29,8 @@ interface Quality {
 export class AppComponent implements OnInit {
   @ViewChild('menuContent') menuContent!: ElementRef;
   
+//advanced-storage.online/iptv/GetAll
+
   title = 'IPTV';
   player: any;
   isMenuOpen = false;
