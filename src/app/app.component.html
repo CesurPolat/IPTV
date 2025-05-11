@@ -21,7 +21,7 @@
     <ul>
       <li *ngFor="let channel of channels; let i = index" 
           [class.selected]="i === selectedIndex">
-        <img [src]="channel.logo" [alt]="channel.name">
+        <img [src]="channel.poster" [alt]="channel.name">
         <span>{{ channel.name }}</span>
       </li>
     </ul>
