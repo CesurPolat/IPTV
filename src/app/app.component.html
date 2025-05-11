@@ -8,6 +8,13 @@
   <div class="play-icon" [class.hidden]="!showPlayIcon" (click)="playVideo()"></div>
 </div>
 
+<div class="quality-selector" [class.hidden]="!isMenuOpen" [class.active]="isQualitySelectorActive">
+  <div class="quality-label">Video Kalitesi</div>
+  <div class="quality-value" [class.selected]="isQualitySelectorActive">
+    {{availableQualities[selectedQualityIndex]?.label || 'Otomatik'}}
+  </div>
+</div>
+
 <div class="side-menu" [class.open]="isMenuOpen">
   <div class="menu-content" #menuContent>
     <h2>Kanal Listesi</h2>
@@ -167,5 +174,47 @@
 
   .play-icon.hidden {
     display: none;
+  }
+
+  .quality-selector {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 5px;
+    color: white;
+    transition: all 0.3s ease;
+    opacity: 1;
+    min-width: 150px;
+  }
+
+  .quality-selector.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .quality-selector.active {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.05);
+  }
+
+  .quality-label {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-bottom: 5px;
+  }
+
+  .quality-value {
+    font-size: 14px;
+    padding: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    transition: background 0.3s ease;
+  }
+
+  .quality-value.selected {
+    background: rgba(255, 255, 255, 0.3);
   }
 </style>

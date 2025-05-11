@@ -11,6 +11,14 @@ interface Channel {
   url: string;
 }
 
+interface Quality {
+  id: string;
+  label: string;
+  width?: number;
+  height?: number;
+  bandwidth?: number;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -21,6 +29,8 @@ interface Channel {
 export class AppComponent implements OnInit {
   @ViewChild('menuContent') menuContent!: ElementRef;
   
+//advanced-storage.online/iptv/GetAll
+
   title = 'IPTV';
   player: any;
   isMenuOpen = false;
@@ -43,6 +53,10 @@ export class AppComponent implements OnInit {
     { name: 'DMAX', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/DMAX_BLACK.svg/1920px-DMAX_BLACK.svg.png', url: 'https://dogus.daioncdn.net/dmax/dmax.m3u8?ce=3&app=5a02c599-d17e-4982-9b04-090934d51af7' }
   ];
   
+  availableQualities: Quality[] = [];
+  currentQuality: string = 'auto';
+  selectedQualityIndex: number = 0;
+  isQualitySelectorActive: boolean = false;
 
   ngOnInit() {
     this.player = videojs('my-video', {
@@ -60,6 +74,48 @@ export class AppComponent implements OnInit {
 
     this.player.on('pause', () => {
       this.showPlayIcon = true;
+    });
+
+    // Bit hızlarını logla ve kalite seçeneklerini güncelle
+    this.player.on('loadedmetadata', () => {
+      const tech = this.player.tech({ IWillNotUseThisInPlugins: true });
+      if (tech && tech.vhs) {
+        const representations = tech.vhs.representations();
+        console.log('Mevcut Bit Hızları:');
+        
+        // Kalite seçeneklerini güncelle
+        this.availableQualities = [
+          { id: 'auto', label: 'Otomatik' },
+          ...representations.map((rep: any) => {
+            if (rep.bandwidth) {
+              const bitrate = rep.bandwidth / 1000;
+              const resolution = rep.width ? `${rep.width}x${rep.height}` : 'Bilinmiyor';
+              console.log(`Kalite: ${resolution} - ${bitrate.toFixed(2)} kbps`);
+              return {
+                id: rep.id,
+                label: `${resolution} (${bitrate.toFixed(0)} kbps)`,
+                width: rep.width,
+                height: rep.height,
+                bandwidth: rep.bandwidth
+              };
+            }
+            return null;
+          }).filter((q: Quality | null) => q !== null)
+        ];
+      }
+    });
+
+    // Mevcut bit hızını logla
+    this.player.on('ratechange', () => {
+      const tech = this.player.tech({ IWillNotUseThisInPlugins: true });
+      if (tech && tech.vhs) {
+        const currentRep = tech.vhs.representations().find((rep: any) => rep.enabled);
+        if (currentRep && currentRep.bandwidth) {
+          const currentBitrate = currentRep.bandwidth / 1000;
+          const resolution = currentRep.width ? `${currentRep.width}x${currentRep.height}` : 'Bilinmiyor';
+          console.log(`Şu anki kalite: ${resolution} - ${currentBitrate.toFixed(2)} kbps`);
+        }
+      }
     });
 
     this.selectedIndex = 0;
@@ -89,6 +145,20 @@ export class AppComponent implements OnInit {
         src: newUrl,
         type: 'application/x-mpegURL'
       });
+
+      // Yeni medya yüklendiğinde bit hızını yazdır
+      this.player.one('loadedmetadata', () => {
+        const tech = this.player.tech({ IWillNotUseThisInPlugins: true });
+        if (tech && tech.vhs) {
+          const currentRep = tech.vhs.representations().find((rep: any) => rep.enabled);
+          if (currentRep && currentRep.bandwidth) {
+            const currentBitrate = currentRep.bandwidth / 1000;
+            const resolution = currentRep.width ? `${currentRep.width}x${currentRep.height}` : 'Bilinmiyor';
+            console.log(`Yeni kanal kalitesi: ${resolution} - ${currentBitrate.toFixed(2)} kbps`);
+          }
+        }
+      });
+
       this.player.play();
     }
   }
@@ -121,6 +191,7 @@ export class AppComponent implements OnInit {
   onBackspacePress(event: KeyboardEvent) {
     event.preventDefault();
     this.isMenuOpen = !this.isMenuOpen;
+    this.isQualitySelectorActive = false;
     if (this.isMenuOpen) {
       const currentUrl = this.player.currentSrc();
       const currentChannelIndex = this.channels.findIndex(channel => channel.url === currentUrl);
@@ -131,24 +202,43 @@ export class AppComponent implements OnInit {
     }
   }
 
-  @HostListener('document:keydown.arrowdown', ['$event'])
-  onArrowDown(event: KeyboardEvent) {
+  @HostListener('document:keydown', ['$event'])
+  handleKeyboardEvent(event: KeyboardEvent) {
     if (this.isMenuOpen) {
-      event.preventDefault();
-      if (this.selectedIndex < this.channels.length - 1) {
-        this.selectedIndex++;
-        this.scrollToSelected();
-      }
-    }
-  }
-
-  @HostListener('document:keydown.arrowup', ['$event'])
-  onArrowUp(event: KeyboardEvent) {
-    if (this.isMenuOpen) {
-      event.preventDefault();
-      if (this.selectedIndex > 0) {
-        this.selectedIndex--;
-        this.scrollToSelected();
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        this.isQualitySelectorActive = true;
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        this.isQualitySelectorActive = false;
+      } else if (this.isQualitySelectorActive) {
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (this.selectedQualityIndex > 0) {
+            this.selectedQualityIndex--;
+            this.changeQualityById(this.availableQualities[this.selectedQualityIndex].id);
+          }
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          if (this.selectedQualityIndex < this.availableQualities.length - 1) {
+            this.selectedQualityIndex++;
+            this.changeQualityById(this.availableQualities[this.selectedQualityIndex].id);
+          }
+        }
+      } else {
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (this.selectedIndex > 0) {
+            this.selectedIndex--;
+            this.scrollToSelected();
+          }
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          if (this.selectedIndex < this.channels.length - 1) {
+            this.selectedIndex++;
+            this.scrollToSelected();
+          }
+        }
       }
     }
   }
@@ -156,6 +246,30 @@ export class AppComponent implements OnInit {
   playVideo() {
     if (this.player) {
       this.player.play();
+    }
+  }
+
+  changeQuality(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const qualityId = select.value;
+    this.changeQualityById(qualityId);
+  }
+
+  changeQualityById(qualityId: string) {
+    this.currentQuality = qualityId;
+    this.selectedQualityIndex = this.availableQualities.findIndex(q => q.id === qualityId);
+
+    const tech = this.player.tech({ IWillNotUseThisInPlugins: true });
+    if (tech && tech.vhs) {
+      if (qualityId === 'auto') {
+        tech.vhs.representations().forEach((rep: any) => {
+          rep.enabled(true);
+        });
+      } else {
+        tech.vhs.representations().forEach((rep: any) => {
+          rep.enabled(rep.id === qualityId);
+        });
+      }
     }
   }
 
