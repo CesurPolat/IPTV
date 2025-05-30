@@ -35,7 +35,7 @@ interface Quality {
 })
 export class AppComponent implements OnInit {
   @ViewChild('menuContent') menuContent!: ElementRef;
-  
+
   title = 'IPTV';
   player: any;
   isMenuOpen = false;
@@ -46,8 +46,10 @@ export class AppComponent implements OnInit {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
-  
-  constructor(private http: HttpClient) {}
+  appVersion: string = "0.1.4"; // Uygulamanızın mevcut sürümünü buraya taşıyın
+  currentChannelName: string = '';
+
+  constructor(private http: HttpClient) { }
 
   ngOnInit() {
     this.loadChannels();
@@ -55,9 +57,7 @@ export class AppComponent implements OnInit {
 
     Updater.echo({ value: 'Capacitor Web Updater is ready!' });
 
-    var version = "0.1.4"; // Uygulamanızın mevcut sürümünü buraya girin
-
-    Updater.isLatestVersion({value: version}).then((result) => {
+    Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
       if (!result.value) {
         console.log('Yeni bir güncelleme mevcut:', result.value);
         // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
@@ -74,20 +74,27 @@ export class AppComponent implements OnInit {
     });
 
   }
-
   loadChannels() {
-    this.http.get<Channel[]>('https://advanced-storage.online/iptv/GetAll')
-      .subscribe({
-        next: (data) => {
-          this.channels = data;
-          if (this.channels.length > 0) {
-            this.initializePlayer();
+
+    if (!(this.channels.length > 0 && parseInt(localStorage.getItem('channelsLoadTime') || '0', 10) > Date.now())) {
+      this.http.get<Channel[]>('https://advanced-storage.online/iptv/GetAll')
+        .subscribe({
+          next: (data) => {
+            this.channels = data;
+            const loadTime = new Date();
+            loadTime.setHours(loadTime.getHours() + 3);
+            localStorage.setItem('channelsLoadTime', loadTime.getTime().toString());
+
+            if (this.channels.length > 0 && !this.player) {
+              this.initializePlayer();
+            }
+          },
+          error: (error) => {
+            console.error('Kanal listesi yüklenirken hata oluştu:', error);
           }
-        },
-        error: (error) => {
-          console.error('Kanal listesi yüklenirken hata oluştu:', error);
-        }
-      });
+        });
+    }
+
   }
 
   initializePlayer() {
@@ -101,6 +108,9 @@ export class AppComponent implements OnInit {
         type: 'application/x-mpegURL'
       }]
     });
+
+    //TODO: selectChannel fonksiyonunu kullanarak kanalları seçme işlemini yapabilirsiniz.
+    this.currentChannelName = this.channels[0].name;
 
     this.player.on('play', () => {
       this.showPlayIcon = false;
@@ -116,7 +126,7 @@ export class AppComponent implements OnInit {
       if (tech && tech.vhs) {
         const representations = tech.vhs.representations();
         console.log('Mevcut Bit Hızları:');
-        
+
         // Kalite seçeneklerini güncelle
         this.availableQualities = [
           { id: 'auto', label: 'Otomatik' },
@@ -169,7 +179,7 @@ export class AppComponent implements OnInit {
     if (this.player && this.channels[index]) {
       const currentUrl = this.player.currentSrc();
       const newUrl = this.channels[index].source;
-      
+
       // Eğer seçilen kanal zaten oynatılıyorsa, source'u güncelleme
       if (currentUrl === newUrl) {
         return;
@@ -179,6 +189,8 @@ export class AppComponent implements OnInit {
         src: newUrl,
         type: 'application/x-mpegURL'
       });
+
+      this.currentChannelName = this.channels[index].name;
 
       // Yeni medya yüklendiğinde bit hızını yazdır
       this.player.one('loadedmetadata', () => {
@@ -227,8 +239,8 @@ export class AppComponent implements OnInit {
     this.isMenuOpen = !this.isMenuOpen;
     this.isQualitySelectorActive = false;
     if (this.isMenuOpen) {
-      const currentUrl = this.player.currentSrc();
-      const currentChannelIndex = this.channels.findIndex(channel => channel.source === currentUrl);
+      this.loadChannels();
+      const currentChannelIndex = this.channels.findIndex(channel => channel.name === this.currentChannelName);
       this.selectedIndex = currentChannelIndex >= 0 ? currentChannelIndex : 0;
       setTimeout(() => this.scrollToSelected(), 100);
     } else {

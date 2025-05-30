@@ -28,6 +28,10 @@
   </div>
 </div>
 
+<div class="version-display" *ngIf="isMenuOpen">
+  v{{ appVersion }}
+</div>
+
 <router-outlet></router-outlet>
 
 <style>
@@ -218,4 +222,15 @@
     background: rgba(255, 255, 255, 0.3);
   }
 
+  .version-display {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    z-index: 1001; /* Menünün üzerinde görünmesi için */
+  }
 </style>
