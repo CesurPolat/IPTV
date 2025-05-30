@@ -5,6 +5,10 @@ import { HttpClient, HttpClientModule } from '@angular/common/http';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+
+
+import { Updater } from 'capacitor-web-updater';
 
 interface Channel {
   id: string;
@@ -48,6 +52,27 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     this.loadChannels();
     this.initializePlayer();
+
+    Updater.echo({ value: 'Capacitor Web Updater is ready!' });
+
+    var version = "0.1.4"; // Uygulamanızın mevcut sürümünü buraya girin
+
+    Updater.isLatestVersion({value: version}).then((result) => {
+      if (!result.value) {
+        console.log('Yeni bir güncelleme mevcut:', result.value);
+        // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
+        Updater.getLatestVersion().then((latestVersion) => {
+          console.log('En son sürüm:', latestVersion.value);
+          document.location.href = 'index.html';
+        });
+
+      } else {
+        console.log('Uygulama en son sürümde.');
+      }
+    }).catch((error) => {
+      console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
+    });
+
   }
 
   loadChannels() {
