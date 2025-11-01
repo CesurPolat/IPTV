@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
     
     Updater: {
       autoUpdate: true,
-      updateUrl: 'https://advanced-storage.online/iptv/update.json',
+      updateUrl: 'https://advanced-streaming.online/iptv/update.json',
       checkInterval: 3600 // Check for updates every hour
     }
   }

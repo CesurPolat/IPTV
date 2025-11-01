@@ -46,7 +46,7 @@ export class AppComponent implements OnInit {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
-  appVersion: string = "0.1.4"; // Uygulamanızın mevcut sürümünü buraya taşıyın
+  appVersion: string = "0.1.2"; // Uygulamanızın mevcut sürümünü buraya taşıyın
   currentChannelName: string = '';
 
   constructor(private http: HttpClient) { }
@@ -59,7 +59,7 @@ export class AppComponent implements OnInit {
 
     Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
       if (!result.value) {
-        console.log('Yeni bir güncelleme mevcut:', result.value);
+        console.log('Yeni bir güncelleme mevcut');
         // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
         Updater.getLatestVersion().then((latestVersion) => {
           console.log('En son sürüm:', latestVersion.value);
@@ -74,10 +74,14 @@ export class AppComponent implements OnInit {
     });
 
   }
+  
   loadChannels() {
 
     if (!(this.channels.length > 0 && parseInt(localStorage.getItem('channelsLoadTime') || '0', 10) > Date.now())) {
-      this.http.get<Channel[]>('https://advanced-storage.online/iptv/GetAll')
+      
+      console.log('Kanal listesi yükleniyor...');
+
+      this.http.get<Channel[]>('https://advanced-streaming.online/iptv/GetAll')
         .subscribe({
           next: (data) => {
             this.channels = data;
@@ -90,7 +94,7 @@ export class AppComponent implements OnInit {
             }
           },
           error: (error) => {
-            console.error('Kanal listesi yüklenirken hata oluştu:', error);
+            console.error('Kanal listesi yüklenirken hata oluştu:', error.toString());
           }
         });
     }
