@@ -1,0 +1,25 @@
+<div class="container">
+    <header class="header">
+        <h1>Popüler Kanallar</h1>
+        <!-- <a routerLink="/tv" class="cta-button">Canlı TV İzle</a> -->
+    </header>
+
+    <div class="channel-grid">
+        <div class="channel-card" *ngFor="let channel of channels; let i = index" routerLink="/tv/{{i}}">
+            <div class="image-wrapper">
+                <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
+                <div class="overlay">
+                    <div class="play-icon">▶</div>
+                </div>
+            </div>
+            <div class="card-info">
+                <h3>{{channel.name}}</h3>
+                <p class="category">{{channel.category}}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay" *ngIf="isLoading">
+        <div class="spinner"></div>
+    </div>
+</div>

@@ -1,0 +1,32 @@
+<div class="video-container">
+    <video id="my-video" class="video-js vjs-default-skin" playsinline>
+        <source poster="/assets/poster.png" type="video/mp4">
+        <p class="vjs-no-js">
+            Video.js'i görüntülemek için lütfen JavaScript'i etkinleştirin
+        </p>
+    </video>
+    <div class="play-icon" [class.hidden]="!showPlayIcon" (click)="playVideo()"></div>
+</div>
+
+<div class="quality-selector" [class.hidden]="!isMenuOpen" [class.active]="isQualitySelectorActive">
+    <div class="quality-label">Video Kalitesi</div>
+    <div class="quality-value" [class.selected]="isQualitySelectorActive">
+        {{availableQualities[selectedQualityIndex]?.label || 'Otomatik'}}
+    </div>
+</div>
+
+<div class="side-menu" [class.open]="isMenuOpen">
+    <div class="menu-content" #menuContent>
+        <h2>Kanal Listesi</h2>
+        <ul>
+            <li *ngFor="let channel of channels; let i = index" [class.selected]="i === selectedIndex">
+                <img [src]="channel.poster" [alt]="channel.name">
+                <span>{{ channel.name }}</span>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<div class="version-display" *ngIf="isMenuOpen">
+    v{{ appVersion }}
+</div>
