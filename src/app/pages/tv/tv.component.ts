@@ -4,7 +4,6 @@ import { CommonModule } from '@angular/common';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { App as CapacitorApp } from '@capacitor/app';
-import { Updater } from 'capacitor-web-updater';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -39,7 +38,6 @@ export class TvComponent implements OnInit, OnDestroy {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
-  appVersion: string = "0.1.2"; // Uygulamanızın mevcut sürümünü buraya taşıyın
 
   constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
 
@@ -53,23 +51,7 @@ export class TvComponent implements OnInit, OnDestroy {
       this.handleKeyboardEvent(event);
     });
 
-    Updater.echo({ value: 'Capacitor Web Updater is ready!' });
 
-    Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
-      if (!result.value) {
-        console.log('Yeni bir güncelleme mevcut');
-        // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
-        Updater.getLatestVersion().then((latestVersion) => {
-          console.log('En son sürüm:', latestVersion.value);
-          document.location.href = 'index.html';
-        });
-
-      } else {
-        console.log('Uygulama en son sürümde.');
-      }
-    }).catch((error) => {
-      console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
-    });
 
   }
 
@@ -246,7 +228,8 @@ export class TvComponent implements OnInit, OnDestroy {
         if (this.isQualitySelectorActive)
           this.isQualitySelectorActive = false;
         else
-          this.router.navigate(['/']);
+          document.location.href = 'index.html';
+        //this.router.navigate(['/home']);
 
       }
       else if (event.key == "ArrowRight") {

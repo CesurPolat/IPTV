@@ -2,6 +2,7 @@ import { Component, OnInit, HostListener, ViewChild, ElementRef, OnDestroy, Afte
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
+import { Updater } from 'capacitor-web-updater';
 
 @Component({
     selector: 'app-home',
@@ -20,9 +21,12 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeIndex = 0;
     columns = 1;
 
+    appVersion: string = "0.2.4";
+
     constructor(private tvChannelsService: TvChannelsService, private router: Router) { }
 
     ngOnInit() {
+
         this.tvChannelsService.loadChannels().subscribe((channels: Channel[]) => {
             this.channels = channels;
             this.isLoading = false;
@@ -33,6 +37,24 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 this.activeIndex = 0;
                 this.scrollToActive();
             });
+        });
+
+        Updater.echo({ value: 'Capacitor Web Updater is ready!' });
+
+        Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
+            if (!result.value) {
+                console.log('Yeni bir güncelleme mevcut');
+                // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
+                Updater.getLatestVersion().then((latestVersion) => {
+                    console.log('En son sürüm:', latestVersion.value);
+                    document.location.href = 'index.html';
+                });
+
+            } else {
+                console.log('Uygulama en son sürümde.');
+            }
+        }).catch((error) => {
+            console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
         });
     }
 
