@@ -4,8 +4,9 @@
         <!-- <a routerLink="/tv" class="cta-button">Canlı TV İzle</a> -->
     </header>
 
-    <div class="channel-grid">
-        <div class="channel-card" *ngFor="let channel of channels; let i = index" routerLink="/tv/{{i}}">
+    <div class="channel-grid" #channelGrid>
+        <div class="channel-card" *ngFor="let channel of channels; let i = index" routerLink="/tv/{{i}}" #channelCard
+            [class.active]="i === activeIndex">
             <div class="image-wrapper">
                 <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
                 <div class="overlay">
@@ -14,7 +15,7 @@
             </div>
             <div class="card-info">
                 <h3>{{channel.name}}</h3>
-                <p class="category">{{channel.category}}</p>
+                <p class="category">{{channel.currentShow}}</p>
             </div>
         </div>
     </div>

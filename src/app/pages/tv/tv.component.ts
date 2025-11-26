@@ -6,7 +6,7 @@ import 'video.js/dist/video-js.css';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Updater } from 'capacitor-web-updater';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 
 
@@ -41,7 +41,7 @@ export class TvComponent implements OnInit, OnDestroy {
   isQualitySelectorActive: boolean = false;
   appVersion: string = "0.1.2"; // Uygulamanızın mevcut sürümünü buraya taşıyın
 
-  constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute) { }
+  constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
 
   ngOnInit() {
     this.fetchChannels();
@@ -242,15 +242,16 @@ export class TvComponent implements OnInit, OnDestroy {
 
     if (this.isMenuOpen) {
 
-      switch (event.key) {
-        case 'ArrowRight':
-          this.isQualitySelectorActive = true;
-          break;
-        case 'ArrowLeft':
+      if (event.key == "ArrowLeft") {
+        if (this.isQualitySelectorActive)
           this.isQualitySelectorActive = false;
-          break;
-      }
+        else
+          this.router.navigate(['/']);
 
+      }
+      else if (event.key == "ArrowRight") {
+        this.isQualitySelectorActive = true;
+      }
 
       if (this.isQualitySelectorActive) {
 
