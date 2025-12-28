@@ -228,8 +228,8 @@ export class TvComponent implements OnInit, OnDestroy {
         if (this.isQualitySelectorActive)
           this.isQualitySelectorActive = false;
         else
-          document.location.href = 'index.html';
-        //this.router.navigate(['/home']);
+          this.router.navigate(['/home']);
+          //document.location.href = 'index.html';
 
       }
       else if (event.key == "ArrowRight") {
