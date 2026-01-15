@@ -56,11 +56,12 @@ export class TvComponent implements OnInit, OnDestroy {
   }
 
   fetchChannels() {
-    console.log('Kanal listesi yükleniyor...');
 
+    console.log('[TV] Kanal listesi yükleniyor...');
     this.tvChannelsService.loadChannels().subscribe({
       next: (data) => {
         this.channels = data;
+        console.log('[TV] Kanal listesi yüklendi:', this.channels.length, 'kanal bulundu.');
         if (this.channels.length > 0 && !this.player) {
           this.activatedRoute.params.subscribe(params => {
             const id: number = parseInt(params['id']);
@@ -228,8 +229,8 @@ export class TvComponent implements OnInit, OnDestroy {
         if (this.isQualitySelectorActive)
           this.isQualitySelectorActive = false;
         else
-          this.router.navigate(['/home']);
-          //document.location.href = 'index.html';
+          document.location.href = 'index.html';
+        //this.router.navigate(['/home']);
 
       }
       else if (event.key == "ArrowRight") {

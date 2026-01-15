@@ -21,19 +21,24 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeIndex = 0;
     columns = 1;
 
-    appVersion: string = "0.2.5";
+    appVersion: string = "0.2.8";
 
     constructor(private tvChannelsService: TvChannelsService, private router: Router) { }
 
     ngOnInit() {
 
+        console.log('[Home] document location:', document.location.toString());
+
+        console.log('[Home] Kanal listesi yükleniyor...');
         this.tvChannelsService.loadChannels().subscribe((channels: Channel[]) => {
             this.channels = channels;
             this.isLoading = false;
+
+            console.log('[Home] Kanal listesi yüklendi:', this.channels.length, 'kanal bulundu.');
+
             // Wait for view to render
             setTimeout(() => {
                 this.calculateColumns();
-
                 this.activeIndex = 0;
                 this.scrollToActive();
             });
