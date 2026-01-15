@@ -1,0 +1,27 @@
+<div class="video-container">
+    <div class="video-wrapper">
+        <video id="my-video" class="video-js vjs-default-skin" playsinline>
+            <source type="video/mp4">
+        </video>
+    </div>
+
+    <div class="custom-controls" [class.hidden]="!showControls">
+        <button class="play-pause-btn" (click)="togglePlay()">
+            @if (!isPlaying) {
+                <span>▶</span>
+            } @else {
+                <span>⏸</span>
+            }
+        </button>
+
+        <div class="progress-container">
+            <input type="range" class="seek-bar" 
+                   [value]="currentTime" 
+                   [max]="duration" 
+                   (input)="onSeek($event)">
+            <div class="time-display">
+                {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
+            </div>
+        </div>
+    </div>
+</div>
