@@ -41,6 +41,19 @@
     }
 }
 
+.grid-section {
+    margin-bottom: 3rem;
+
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        border-left: 4px solid #e50914;
+        padding-left: 1rem;
+    }
+}
+
 .channel-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

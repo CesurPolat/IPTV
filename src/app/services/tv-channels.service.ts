@@ -8,9 +8,10 @@ export interface Channel {
   poster: string;
   source: string;
   category: string;
-  channelId: string;
-
+  
+  channelId?: string;
   currentShow?: string;
+  originalIndex?: number;
 }
 
 export interface BroadcastSchedule {

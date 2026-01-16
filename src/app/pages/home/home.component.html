@@ -1,27 +1,51 @@
 <div class="container">
     <header class="header">
-        <h1>Popüler Kanallar</h1>
+        <h1>IPTV</h1>
         <div class="version-display">
             v{{ appVersion }}
         </div>
         <!-- <a routerLink="/tv" class="cta-button">Canlı TV İzle</a> -->
     </header>
 
-    <div class="channel-grid" #channelGrid>
-        <div class="channel-card" *ngFor="let channel of channels; let i = index" routerLink="/tv/{{i}}" #channelCard
-            [class.active]="i === activeIndex">
-            <div class="image-wrapper">
-                <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
-                <div class="overlay">
-                    <div class="play-icon">▶</div>
+    <section class="grid-section">
+        <h2 class="section-title">Popüler Kanallar</h2>
+        <div class="channel-grid" #channelGrid>
+            <div class="channel-card" *ngFor="let channel of channels; let i = index" 
+                [routerLink]="['/tv', channel.originalIndex]" #channelCard
+                [class.active]="activeSection === 'channels' && i === activeIndex">
+                <div class="image-wrapper">
+                    <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
+                    <div class="overlay">
+                        <div class="play-icon">▶</div>
+                    </div>
+                </div>
+                <div class="card-info">
+                    <h3>{{channel.name}}</h3>
+                    <p class="category">{{channel.currentShow}}</p>
                 </div>
             </div>
-            <div class="card-info">
-                <h3>{{channel.name}}</h3>
-                <p class="category">{{channel.currentShow}}</p>
+        </div>
+    </section>
+
+    <section class="grid-section" *ngIf="series.length > 0">
+        <h2 class="section-title">Diziler</h2>
+        <div class="channel-grid">
+            <div class="channel-card" *ngFor="let item of series; let i = index" #channelCard
+                [routerLink]="['/player']" [queryParams]="{ url: item.source }"
+                [class.active]="activeSection === 'series' && i === activeIndex">
+                <div class="image-wrapper">
+                    <img [src]="item.poster" [alt]="item.name" loading="lazy">
+                    <div class="overlay">
+                        <div class="play-icon">▶</div>
+                    </div>
+                </div>
+                <div class="card-info">
+                    <h3>{{item.name}}</h3>
+                    <p class="category">{{item.category}}</p>
+                </div>
             </div>
         </div>
-    </div>
+    </section>
 
     <div class="loading-overlay" *ngIf="isLoading">
         <div class="spinner"></div>

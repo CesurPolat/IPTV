@@ -17,8 +17,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
     channels: Channel[] = [];
+    series: Channel[] = [];
     isLoading = true;
     activeIndex = 0;
+    activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
     appVersion: string = "0.2.8";
@@ -30,11 +32,13 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         console.log('[Home] document location:', document.location.toString());
 
         console.log('[Home] Kanal listesi yükleniyor...');
-        this.tvChannelsService.loadChannels().subscribe((channels: Channel[]) => {
-            this.channels = channels;
+        this.tvChannelsService.loadChannels().subscribe((data: Channel[]) => {
+            const dataWithIndex = data.map((item, index) => ({ ...item, originalIndex: index }));
+            this.channels = dataWithIndex.filter(item => item.category !== 'Series');
+            this.series = dataWithIndex.filter(item => item.category === 'Series');
             this.isLoading = false;
 
-            console.log('[Home] Kanal listesi yüklendi:', this.channels.length, 'kanal bulundu.');
+            console.log(`[Home] Veriler yüklendi: ${this.channels.length} kanal, ${this.series.length} dizi bulundu.`);
 
             // Wait for view to render
             setTimeout(() => {
@@ -93,45 +97,66 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
-        if (this.channels.length === 0) return;
+        const currentData = this.activeSection === 'channels' ? this.channels : this.series;
+        if (currentData.length === 0) return;
 
-        // Prevent default scrolling for arrow keys
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
         }
 
         switch (event.key) {
             case 'ArrowRight':
-                this.activeIndex = (this.activeIndex + 1) % this.channels.length;
-                this.scrollToActive();
+                if (this.activeIndex < currentData.length - 1) {
+                    this.activeIndex++;
+                } else if (this.activeSection === 'channels' && this.series.length > 0) {
+                    // Sayfa sonundan diğer bölüme geçme opsiyonu (isteğe bağlı)
+                }
                 break;
             case 'ArrowLeft':
-                this.activeIndex = (this.activeIndex - 1 + this.channels.length) % this.channels.length;
-                this.scrollToActive();
+                if (this.activeIndex > 0) {
+                    this.activeIndex--;
+                }
                 break;
             case 'ArrowUp':
                 if (this.activeIndex - this.columns >= 0) {
                     this.activeIndex -= this.columns;
-                    this.scrollToActive();
+                } else if (this.activeSection === 'series') {
+                    this.activeSection = 'channels';
+                    this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
                 }
                 break;
             case 'ArrowDown':
-                if (this.activeIndex + this.columns < this.channels.length) {
+                if (this.activeIndex + this.columns < currentData.length) {
                     this.activeIndex += this.columns;
-                    this.scrollToActive();
+                } else if (this.activeSection === 'channels' && this.series.length > 0) {
+                    this.activeSection = 'series';
+                    this.activeIndex = 0;
                 }
                 break;
             case 'Enter':
-                this.router.navigate(['/tv', this.activeIndex]);
+                if (this.activeSection === 'channels') {
+                    const channel = this.channels[this.activeIndex];
+                    this.router.navigate(['/tv', channel.originalIndex]);
+                } else {
+                    const seriesItem = this.series[this.activeIndex];
+                    // Diziler için yeni hazırladığımız player'a yönlendiriyoruz
+                    this.router.navigate(['/player'], { queryParams: { url: seriesItem.source } });
+                }
                 break;
         }
+        this.scrollToActive();
     }
 
     scrollToActive() {
-        const activeCard = this.channelCards.get(this.activeIndex);
-        if (activeCard) {
-            activeCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        setTimeout(() => {
+            const cards = this.channelCards.toArray();
+            const indexOffset = this.activeSection === 'series' ? this.channels.length : 0;
+            const targetCard = cards[this.activeIndex + indexOffset];
+            
+            if (targetCard) {
+                targetCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
     }
 
     ngOnDestroy() {

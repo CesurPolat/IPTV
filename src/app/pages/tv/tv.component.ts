@@ -60,7 +60,7 @@ export class TvComponent implements OnInit, OnDestroy {
     console.log('[TV] Kanal listesi yükleniyor...');
     this.tvChannelsService.loadChannels().subscribe({
       next: (data) => {
-        this.channels = data;
+        this.channels = data.filter(item => item.category == 'TVChannel');
         console.log('[TV] Kanal listesi yüklendi:', this.channels.length, 'kanal bulundu.');
         if (this.channels.length > 0 && !this.player) {
           this.activatedRoute.params.subscribe(params => {
