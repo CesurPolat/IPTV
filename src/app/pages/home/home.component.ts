@@ -23,7 +23,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
-    appVersion: string = "0.2.8";
+    appVersion: string = "0.3.0";
 
     constructor(private tvChannelsService: TvChannelsService, private router: Router) { }
 
