@@ -38,6 +38,8 @@ export class TvComponent implements OnInit, OnDestroy {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
+  showChannelInfo: boolean = false;
+  private infoTimeout: any;
 
   constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
 
@@ -103,6 +105,8 @@ export class TvComponent implements OnInit, OnDestroy {
     this.player.play().catch(() => {
       this.showPlayIcon = true;
     });
+
+    this.triggerChannelInfo();
 
     // Bit hızlarını logla ve kalite seçeneklerini güncelle
     this.player.on('loadedmetadata', () => {
@@ -183,7 +187,18 @@ export class TvComponent implements OnInit, OnDestroy {
       });
 
       this.player.play();
+      this.triggerChannelInfo();
     }
+  }
+
+  triggerChannelInfo() {
+    this.showChannelInfo = true;
+    if (this.infoTimeout) {
+      clearTimeout(this.infoTimeout);
+    }
+    this.infoTimeout = setTimeout(() => {
+      this.showChannelInfo = false;
+    }, 5000); // 5 saniye sonra gizle
   }
 
   scrollToSelected(index: number) {

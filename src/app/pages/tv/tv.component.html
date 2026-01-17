@@ -8,6 +8,14 @@
     <div class="play-icon" [class.hidden]="!showPlayIcon" (click)="playVideo()"></div>
 </div>
 
+<div class="channel-info-panel" [class.show]="showChannelInfo" *ngIf="channels[currentChannelIndex]">
+    <img [src]="channels[currentChannelIndex].poster" class="channel-logo" alt="Logo">
+    <div class="channel-text">
+        <div class="channel-name">{{ channels[currentChannelIndex].name }}</div>
+        <div class="show-name">{{ channels[currentChannelIndex].currentShow || 'Yayın bilgisi yok' }}</div>
+    </div>
+</div>
+
 <div class="quality-selector" [class.hidden]="!isMenuOpen" [class.active]="isQualitySelectorActive">
     <div class="quality-label">Video Kalitesi</div>
     <div class="quality-value" [class.selected]="isQualitySelectorActive">
