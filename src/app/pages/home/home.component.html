@@ -22,7 +22,8 @@
                 </div>
                 <div class="card-info">
                     <h3>{{channel.name}}</h3>
-                    <p class="category">{{channel.currentShow}}</p>
+                    <p class="current-show" *ngIf="channel.currentShow">{{channel.currentShow}}</p>
+                    <p class="category" *ngIf="!channel.currentShow">{{channel.category}}</p>
                 </div>
             </div>
         </div>

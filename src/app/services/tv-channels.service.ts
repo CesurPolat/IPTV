@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, tap, map } from 'rxjs';
+import { Observable, of, tap, map, switchMap } from 'rxjs';
 
 export interface Channel {
   id: string;
@@ -43,17 +43,15 @@ export class TvChannelsService {
 
     return this.http.get<Channel[]>(`${TvChannelsService.baseUrl}/iptv/GetAll`).pipe(
       tap(data => {
-        this.channels = data;
         const loadTime = new Date();
         loadTime.setHours(loadTime.getHours() + 3);
         localStorage.setItem('channelsLoadTime', loadTime.getTime().toString());
       }),
-      map(data => {
-        this.getCurrentSchedule(data).subscribe(data => {
-          this.channels = data;
-        });
-        return this.channels;
-      })
+      switchMap((data: Channel[]) => this.getCurrentSchedule(data).pipe(
+        tap(channelsWithSchedule => {
+          this.channels = channelsWithSchedule;
+        })
+      ))
     );
   }
 

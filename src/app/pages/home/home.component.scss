@@ -142,6 +142,16 @@
             color: #eee;
         }
 
+        .current-show {
+            margin: 0.5rem 0 0;
+            font-size: 0.85rem;
+            color: #ff6b6b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 500;
+        }
+
         .category {
             margin: 0.5rem 0 0;
             font-size: 0.8rem;
