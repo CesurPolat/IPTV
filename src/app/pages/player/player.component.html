@@ -6,7 +6,7 @@
     </div>
 
     <div class="custom-controls" [class.hidden]="!showControls">
-        <button class="play-pause-btn" (click)="togglePlay()">
+        <button class="play-pause-btn" (click)="togglePlay()" tabindex="-1">
             @if (!isPlaying) {
                 <span>▶</span>
             } @else {
@@ -18,7 +18,8 @@
             <input type="range" class="seek-bar" 
                    [value]="currentTime" 
                    [max]="duration" 
-                   (input)="onSeek($event)">
+                   (input)="onSeek($event)"
+                   tabindex="-1">
             <div class="time-display">
                 {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
             </div>

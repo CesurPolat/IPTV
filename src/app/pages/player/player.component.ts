@@ -69,6 +69,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     this.resetControlsTimer();
 
+    /* if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Backspace'].includes(event.key)) {
+      event.preventDefault();
+    } */
+
     switch (event.key) {
       case 'Backspace':
         window.location.href = 'index.html';
