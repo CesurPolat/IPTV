@@ -26,7 +26,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
-    appVersion: string = "0.3.3";
+    appVersion: string = "0.3.4";
     searchQuery = '';
     isListening = false;
 
