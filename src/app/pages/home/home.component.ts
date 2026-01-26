@@ -1,13 +1,14 @@
-import { Component, OnInit, HostListener, ViewChild, ElementRef, OnDestroy, AfterViewInit, ViewChildren, QueryList } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, ElementRef, OnDestroy, AfterViewInit, ViewChildren, QueryList, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
 import { Updater } from 'capacitor-web-updater';
 
 @Component({
     selector: 'app-home',
     standalone: true,
-    imports: [CommonModule, RouterLink],
+    imports: [CommonModule, RouterLink, FormsModule],
     templateUrl: './home.component.html',
     styleUrl: './home.component.scss'
 })
@@ -16,6 +17,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChild('channelGrid') channelGrid!: ElementRef;
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
+    allChannels: Channel[] = [];
+    allSeries: Channel[] = [];
     channels: Channel[] = [];
     series: Channel[] = [];
     isLoading = true;
@@ -24,8 +27,14 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     columns = 1;
 
     appVersion: string = "0.3.3";
+    searchQuery = '';
+    isListening = false;
 
-    constructor(private tvChannelsService: TvChannelsService, private router: Router) { }
+    constructor(
+        private tvChannelsService: TvChannelsService,
+        private router: Router,
+        private ngZone: NgZone
+    ) { }
 
     ngOnInit() {
 
@@ -34,8 +43,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         console.log('[Home] Kanal listesi yükleniyor...');
         this.tvChannelsService.loadChannels().subscribe((data: Channel[]) => {
             const dataWithIndex = data.map((item, index) => ({ ...item, originalIndex: index }));
-            this.channels = dataWithIndex.filter(item => item.category !== 'Series');
-            this.series = dataWithIndex.filter(item => item.category === 'Series');
+            this.allChannels = dataWithIndex.filter(item => item.category !== 'Series');
+            this.allSeries = dataWithIndex.filter(item => item.category === 'Series');
+            this.channels = [...this.allChannels];
+            this.series = [...this.allSeries];
             this.isLoading = false;
 
             console.log(`[Home] Veriler yüklendi: ${this.channels.length} kanal, ${this.series.length} dizi bulundu.`);
@@ -97,6 +108,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
+        if ((event.target as HTMLElement).tagName === 'INPUT') return;
+
         const currentData = this.activeSection === 'channels' ? this.channels : this.series;
         if (currentData.length === 0) return;
 
@@ -157,6 +170,93 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 targetCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         });
+    }
+
+    filterResults() {
+        console.log('Arama sorgusu:', this.searchQuery);
+
+        const query = this.searchQuery.toLowerCase().trim();
+        if (!query) {
+            this.channels = [...this.allChannels];
+            this.series = [...this.allSeries];
+        } else {
+            this.channels = this.allChannels.filter(c => 
+                c.name.toLowerCase().includes(query) || 
+                (c.currentShow && c.currentShow.toLowerCase().includes(query)) ||
+                c.category.toLowerCase().includes(query)
+            );
+            this.series = this.allSeries.filter(s => 
+                s.name.toLowerCase().includes(query) || 
+                s.category.toLowerCase().includes(query)
+            );
+        }
+        this.activeIndex = 0;
+        this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels');
+        this.scrollToActive();
+    }
+
+    startSpeechRecognition() {
+        if (!navigator.onLine) {
+            alert('İnternet bağlantısı yok. Ses tanıma için internet gereklidir.');
+            return;
+        }
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            alert('Tarayıcınız ses tanıma özelliğini desteklemiyor.');
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'tr-TR';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            this.ngZone.run(() => {
+                this.isListening = true;
+            });
+        };
+
+        recognition.onresult = (event: any) => {
+            this.ngZone.run(() => {
+                const transcript = event.results[0][0].transcript;
+                console.log('Ses tanıma sonucu:', transcript);
+                this.searchQuery = transcript;
+                this.filterResults();
+            });
+        };
+
+        recognition.onerror = (event: any) => {
+            this.ngZone.run(() => {
+                console.error('Ses tanıma hatası:', event.error);
+                this.isListening = false;
+                
+                if (event.error === 'network') {
+                    alert('Ses tanıma hatası: İnternet bağlantısı kesildi veya konuşma servislerine ulaşılamıyor.');
+                } else if (event.error === 'not-allowed') {
+                    alert('Mikrofon izni reddedildi. Lütfen ayarlardan izin verin.');
+                } else if (event.error === 'no-speech') {
+                    // Sessiz kalındığında hata vermeye gerek yok, sadece dinlemeyi bitir
+                } else {
+                    alert('Ses tanıma sırasında bir hata oluştu: ' + event.error);
+                }
+            });
+        };
+
+        recognition.onend = () => {
+            this.ngZone.run(() => {
+                this.isListening = false;
+            });
+        };
+
+        try {
+            recognition.start();
+        } catch (e) {
+            console.error('Ses tanıma başlatılamadı:', e);
+            this.isListening = false;
+        }
     }
 
     ngOnDestroy() {

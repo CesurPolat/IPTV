@@ -1,6 +1,12 @@
 <div class="container">
     <header class="header">
         <h1>IPTV</h1>
+        <div class="search-container">
+            <input type="text" [(ngModel)]="searchQuery" (input)="filterResults()" placeholder="Kanal veya dizi ara..." class="search-input">
+            <button (click)="startSpeechRecognition()" class="mic-button" [class.listening]="isListening">
+                <span class="mic-icon">🎤</span>
+            </button>
+        </div>
         <div class="version-display">
             v{{ appVersion }}
         </div>

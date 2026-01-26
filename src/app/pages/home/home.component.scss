@@ -39,6 +39,66 @@
             background: #f40612;
         }
     }
+
+    .search-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 5px 15px;
+        border-radius: 25px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        width: 300px;
+        transition: all 0.3s ease;
+
+        &:focus-within {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #e50914;
+            width: 350px;
+        }
+
+        .search-input {
+            background: transparent;
+            border: none;
+            color: white;
+            flex: 1;
+            padding: 8px 0;
+            font-size: 1rem;
+            outline: none;
+
+            &::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        }
+
+        .mic-button {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+
+            &.listening {
+                color: #ff6b6b;
+                animation: pulse 1.5s infinite;
+            }
+
+            .mic-icon {
+                filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));
+            }
+        }
+    }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 9, 20, 0.4); }
+    70% { transform: scale(1.2); box-shadow: 0 0 0 10px rgba(229, 9, 20, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 9, 20, 0); }
 }
 
 .grid-section {
