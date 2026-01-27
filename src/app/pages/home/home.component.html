@@ -4,7 +4,7 @@
         <div class="search-container">
             <input type="text" [(ngModel)]="searchQuery" (input)="filterResults()" 
                 placeholder="Kanal veya dizi ara..." class="search-input" #searchInput>
-            <button (click)="startSpeechRecognition()" class="mic-button" [class.listening]="isListening">
+            <button (click)="startSpeechRecognition()" class="mic-button" [class.listening]="isListening" tabindex="-1">
                 <span class="mic-icon">🎤</span>
             </button>
         </div>
