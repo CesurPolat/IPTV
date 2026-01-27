@@ -15,6 +15,7 @@ import { Updater } from 'capacitor-web-updater';
 export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @ViewChild('channelGrid') channelGrid!: ElementRef;
+    @ViewChild('searchInput') searchInput!: ElementRef;
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
     allChannels: Channel[] = [];
@@ -26,7 +27,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
-    appVersion: string = "0.3.4";
+    appVersion: string = "0.3.6";
     searchQuery = '';
     isListening = false;
 
@@ -108,11 +109,20 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
-        if ((event.target as HTMLElement).tagName === 'INPUT') return;
+        if ((event.target as HTMLElement).tagName === 'INPUT') {
+            if (event.key === 'ArrowDown') {
+                this.searchInput.nativeElement.blur();
+                this.activeSection = 'channels';
+                this.activeIndex = 0;
+                this.scrollToActive();
+                event.preventDefault();
+            }
+            return;
+        }
 
         const currentData = this.activeSection === 'channels' ? this.channels : this.series;
-        if (currentData.length === 0) return;
-
+        if (currentData.length === 0 && this.activeSection !== 'channels') return;
+        
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
         }
@@ -136,6 +146,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 } else if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
                     this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
+                } else if (this.activeSection === 'channels' && this.activeIndex < this.columns) {
+                    this.searchInput.nativeElement.focus();
+                    event.preventDefault();
                 }
                 break;
             case 'ArrowDown':

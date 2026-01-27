@@ -2,7 +2,8 @@
     <header class="header">
         <h1>IPTV</h1>
         <div class="search-container">
-            <input type="text" [(ngModel)]="searchQuery" (input)="filterResults()" placeholder="Kanal veya dizi ara..." class="search-input">
+            <input type="text" [(ngModel)]="searchQuery" (input)="filterResults()" 
+                placeholder="Kanal veya dizi ara..." class="search-input" #searchInput>
             <button (click)="startSpeechRecognition()" class="mic-button" [class.listening]="isListening">
                 <span class="mic-icon">🎤</span>
             </button>
