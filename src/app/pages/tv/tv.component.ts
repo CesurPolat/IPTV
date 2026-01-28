@@ -40,6 +40,7 @@ export class TvComponent implements OnInit, OnDestroy {
   isQualitySelectorActive: boolean = false;
   showChannelInfo: boolean = false;
   private infoTimeout: any;
+  private backButtonListener: any;
 
   constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
 
@@ -47,14 +48,11 @@ export class TvComponent implements OnInit, OnDestroy {
     this.fetchChannels();
 
     // Capacitor back button listener'ı ekle
-    CapacitorApp.addListener('backButton', () => {
+    this.backButtonListener = CapacitorApp.addListener('backButton', () => {
       // Backspace tuşuna basılmış gibi davran
       const event = new KeyboardEvent('keydown', { key: 'Backspace' });
       this.handleKeyboardEvent(event);
     });
-
-
-
   }
 
   fetchChannels() {
@@ -315,6 +313,9 @@ export class TvComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.player) {
       this.player.dispose();
+    }
+    if (this.backButtonListener) {
+      this.backButtonListener.remove();
     }
   }
 }
