@@ -15,7 +15,6 @@ import { Updater } from 'capacitor-web-updater';
 export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @ViewChild('channelGrid') channelGrid!: ElementRef;
-    @ViewChild('searchInput') searchInput!: ElementRef;
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
     allChannels: Channel[] = [];
@@ -27,7 +26,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
-    appVersion: string = "0.3.7";
     searchQuery = '';
     isListening = false;
     private searchTimeout?: any;
@@ -61,23 +59,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             });
         });
 
-        Updater.echo({ value: 'Capacitor Web Updater is ready!' });
 
-        Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
-            if (!result.value) {
-                console.log('Yeni bir güncelleme mevcut');
-                // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
-                Updater.getLatestVersion().then((latestVersion) => {
-                    console.log('En son sürüm:', latestVersion.value);
-                    document.location.href = 'index.html';
-                });
-
-            } else {
-                console.log('Uygulama en son sürümde.');
-            }
-        }).catch((error) => {
-            console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
-        });
     }
 
     ngAfterViewInit() {
@@ -110,17 +92,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
-        if ((event.target as HTMLElement).tagName === 'INPUT') {
-            if (event.key === 'ArrowDown') {
-                this.searchInput.nativeElement.blur();
-                this.activeSection = 'channels';
-                this.activeIndex = 0;
-                this.scrollToActive();
-                event.preventDefault();
-            }
-            return;
-        }
-
         const currentData = this.activeSection === 'channels' ? this.channels : this.series;
         if (currentData.length === 0 && this.activeSection !== 'channels') return;
 
@@ -147,9 +118,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 } else if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
                     this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
-                } else if (this.activeSection === 'channels' && this.activeIndex < this.columns) {
-                    this.searchInput.nativeElement.focus();
-                    event.preventDefault();
                 }
                 break;
             case 'ArrowDown':

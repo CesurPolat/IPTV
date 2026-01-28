@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, tap, map, switchMap } from 'rxjs';
 import { CapacitorHttp } from '@capacitor/core';
+import { NotificationService } from './notification.service';
 
 export interface Channel {
   id: string;
@@ -31,7 +32,10 @@ export class TvChannelsService {
 
   private channels: Channel[] = [];
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private notificationService: NotificationService
+  ) { }
 
   loadChannels(): Observable<Channel[]> {
     const hasChannels = this.channels.length > 0;
@@ -97,8 +101,7 @@ export class TvChannelsService {
         originalIndex: -1 // API'den gelenler için işaret
       }));
     } catch (error) {
-      console.error('Search content error:', error);
-      return [];
+      console.error('Search content error:', error);      this.notificationService.showError('İçerik aranırken bir hata oluştu: ' + error);      return [];
     }
   }
 
