@@ -158,7 +158,9 @@ export class SearchComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
-    if (document.activeElement?.tagName === 'INPUT' && event.key !== 'Escape' && event.key !== 'Enter') {
+    const isInputFocused = document.activeElement?.tagName === 'INPUT';
+    
+    if (isInputFocused && event.key !== 'Escape' && event.key !== 'Enter' && event.key !== 'ArrowDown') {
       return;
     }
 
@@ -168,6 +170,8 @@ export class SearchComponent implements OnInit, OnDestroy {
 
     if (event.key === 'Escape') {
       (document.activeElement as HTMLElement)?.blur();
+      this.activeSection = 'results';
+      this.navService.setSearchSelected(false);
       return;
     }
 
@@ -195,16 +199,18 @@ export class SearchComponent implements OnInit, OnDestroy {
         }
         break;
       case 'ArrowDown':
-        if (this.activeSection === 'search_bar') {
-          this.activeSection = 'results';
-          this.navService.setSearchSelected(false);
-          this.activeIndex = 0;
+        if (isInputFocused || this.activeSection === 'search_bar') {
+          if (this.results.length > 0) {
+            this.activeSection = 'results';
+            this.navService.setSearchSelected(false);
+            this.activeIndex = 0;
+          }
         } else if (this.activeSection === 'results' && this.activeIndex + this.columns < this.results.length) {
           this.activeIndex += this.columns;
         }
         break;
       case 'Enter':
-        if (this.activeSection === 'results') {
+        if (this.activeSection === 'results' && this.results.length > 0) {
           const item = this.results[this.activeIndex];
           this.router.navigate(['/player'], { queryParams: { url: item.source } });
         }
@@ -225,7 +231,13 @@ export class SearchComponent implements OnInit, OnDestroy {
   async performSearch() {
     this.isLoading = true;
     this.activeIndex = 0;
-    this.activeSection = 'results';
+    
+    if (this.navService.getSearchSelected()) {
+      this.activeSection = 'search_bar';
+    } else {
+      this.activeSection = 'results';
+    }
+
     try {
       this.results = await this.tvChannelsService.searchContent(this.query);
       setTimeout(() => this.calculateColumns(), 100);

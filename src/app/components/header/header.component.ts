@@ -148,6 +148,7 @@ export class HeaderComponent {
   }
 
   onInputFocus() {
+    this.navService.setSearchSelected(true);
     if (!this.router.url.includes('/search')) {
       this.router.navigate(['/search'], { queryParams: { q: this.searchQuery } });
     }
