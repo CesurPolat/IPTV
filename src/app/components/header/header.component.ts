@@ -1,8 +1,9 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AppComponent } from '../../app.component';
+import { NavigationService } from '../../services/navigation.service';
 
 @Component({
   selector: 'app-header',
@@ -11,8 +12,9 @@ import { AppComponent } from '../../app.component';
   template: `
     <header class="header">
       <h1 routerLink="/home" style="cursor: pointer;">IPTV</h1>
-      <div class="search-container">
-        <input type="text" [(ngModel)]="searchQuery" (keyup.enter)="onSearch()" 
+      <div class="search-container" [class.active]="isSearchActive">
+        <input type="text" #searchInput [(ngModel)]="searchQuery" (ngModelChange)="onSearch()" 
+               (focus)="onInputFocus()"
                placeholder="Kanal veya dizi ara..." class="search-input">
         <button (click)="onSearch()" class="search-button">
           <span class="search-icon">🔍</span>
@@ -56,8 +58,15 @@ import { AppComponent } from '../../app.component';
       background: rgba(255, 255, 255, 0.1);
       padding: 5px 15px;
       border-radius: 25px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 2px solid transparent;
       width: 300px;
+      transition: all 0.3s ease;
+
+      &.active {
+        border-color: #e50914;
+        background: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+      }
     }
 
     .search-input {
@@ -106,13 +115,56 @@ import { AppComponent } from '../../app.component';
   `]
 })
 export class HeaderComponent {
+  @ViewChild('searchInput') searchInput!: ElementRef<HTMLInputElement>;
   searchQuery: string = '';
+  isSearchActive: boolean = false;
+  private searchTimeout: any;
 
-  constructor(private router: Router, public app: AppComponent) {}
+  constructor(
+    private router: Router, 
+    public app: AppComponent,
+    private navService: NavigationService
+  ) {
+    this.navService.isSearchSelected$.subscribe(active => {
+      this.isSearchActive = active;
+      if (active) {
+        setTimeout(() => {
+          this.searchInput?.nativeElement.focus();
+        }, 100);
+      } else {
+        this.searchInput?.nativeElement.blur();
+      }
+    });
 
-  onSearch() {
-    if (this.searchQuery.trim()) {
+    // Listen for global keydown to handle Enter when active
+    window.addEventListener('keydown', (e) => {
+      if (this.isSearchActive && e.key === 'Enter' && document.activeElement?.tagName !== 'INPUT') {
+        this.searchInput?.nativeElement.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement?.tagName === 'INPUT') {
+        this.searchInput?.nativeElement.blur();
+      }
+    });
+  }
+
+  onInputFocus() {
+    if (!this.router.url.includes('/search')) {
       this.router.navigate(['/search'], { queryParams: { q: this.searchQuery } });
     }
+  }
+
+  onSearch() {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
+    this.searchTimeout = setTimeout(() => {
+      const query = this.searchQuery.trim();
+      if (query.length >= 2) {
+        this.router.navigate(['/search'], { queryParams: { q: query } });
+      } else if (query.length === 0 && this.router.url.includes('/search')) {
+        this.router.navigate(['/home']);
+      }
+    }, 400);
   }
 }

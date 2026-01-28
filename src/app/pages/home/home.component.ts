@@ -4,6 +4,7 @@ import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
 import { Updater } from 'capacitor-web-updater';
+import { NavigationService } from '../../services/navigation.service';
 
 @Component({
     selector: 'app-home',
@@ -33,7 +34,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     constructor(
         private tvChannelsService: TvChannelsService,
         private router: Router,
-        private ngZone: NgZone
+        private ngZone: NgZone,
+        private navService: NavigationService
     ) { }
 
     ngOnInit() {
@@ -70,11 +72,21 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
+        // Eğer input odaklıysa ve Escape değilse özel navigasyonu pas geç
+        if (document.activeElement?.tagName === 'INPUT' && event.key !== 'Escape' && event.key !== 'Enter') {
+            return;
+        }
+
         const currentData = this.activeSection === 'channels' ? this.channels : this.series;
         if (currentData.length === 0 && this.activeSection !== 'channels') return;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
+        }
+
+        if (event.key === 'Escape') {
+            (document.activeElement as HTMLElement)?.blur();
+            return;
         }
 
         switch (event.key) {
@@ -105,7 +117,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 }
                 break;
             case 'ArrowUp':
-                if (this.activeSection === 'series') {
+                if (this.activeSection === 'channels') {
+                    this.navService.setSearchSelected(true);
+                    this.router.navigate(['/search']);
+                } else if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
                     this.activeIndex = this.channelIndex;
                 }
@@ -120,7 +135,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 if (this.activeSection === 'channels') {
                     const channel = this.channels[this.channelIndex];
                     this.router.navigate(['/tv', channel.originalIndex]);
-                } else {
+                } else if (this.activeSection === 'series') {
                     const seriesItem = this.series[this.seriesIndex];
                     // Diziler için yeni hazırladığımız player'a yönlendiriyoruz
                     this.router.navigate(['/player'], { queryParams: { url: seriesItem.source } });
@@ -265,7 +280,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     ngOnDestroy() {
-
+        this.navService.setSearchSelected(false);
     }
 
 }
