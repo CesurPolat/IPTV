@@ -15,6 +15,27 @@ export interface Channel {
   originalIndex?: number;
 }
 
+export interface DizipalEpisode {
+  name: string;
+  url: string;
+  episodeNumber: number;
+  description?: string;
+}
+
+export interface DizipalSeason {
+  seasonNumber: number;
+  numberOfEpisodes: number;
+  episode: DizipalEpisode | DizipalEpisode[];
+}
+
+export interface DizipalSeriesDetail {
+  name: string;
+  description: string;
+  image: string;
+  url: string;
+  containsSeason: DizipalSeason | DizipalSeason[];
+}
+
 export interface BroadcastSchedule {
   channelId: string;
   showTitle: string;
@@ -94,6 +115,46 @@ export class TvChannelsService {
       console.error('Search content error:', error);
       this.notificationService.showError('İçerik aranırken bir hata oluştu: ' + error);
       return [];
+    }
+  }
+
+  async getSeriesDetails(seriesId: string): Promise<DizipalSeriesDetail | null> {
+    if (!seriesId) return null;
+
+    try {
+      const result = await firstValueFrom(
+        this.http.get<DizipalSeriesDetail>(`${TvChannelsService.baseUrl}/Streaming/GetSeriesDetail?seriesId=${encodeURIComponent(seriesId)}`)
+      );
+      
+      if (result && result.image) {
+        result.image = result.image.replace('f/f', '1920/1080');
+      }
+
+      const seasons = Array.isArray(result.containsSeason) ? result.containsSeason : [result.containsSeason];
+      seasons.forEach((season: DizipalSeason) => {
+        const episodes = Array.isArray(season.episode) ? season.episode : [season.episode];
+        episodes.forEach(episode => {
+          if (episode && episode.url) {
+            episode.url = `${TvChannelsService.baseUrl}/Streaming/GetMediaUrl?url=${encodeURIComponent(episode.url)}`;
+          }
+        });
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Get series details error:', error);
+      this.notificationService.showError('Dizi detayları yüklenirken bir hata oluştu');
+      return null;
+    }
+  }
+
+  async getVideoUrl(proxyUrl: string): Promise<string> {
+    try {
+      const response = await fetch(proxyUrl);
+      return response.text();
+    } catch (error) {
+      console.error('Get video URL error:', error);
+      return proxyUrl;
     }
   }
 

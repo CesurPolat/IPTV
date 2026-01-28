@@ -1,0 +1,143 @@
+.series-page {
+  position: relative;
+  min-height: 100vh;
+  background: #000;
+  color: white;
+}
+
+.backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60vh;
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,1) 100%);
+  }
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  padding: 100px 4rem 2rem;
+}
+
+.series-header {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 3rem;
+
+  .poster {
+    width: 250px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    img { width: 100%; height: auto; }
+  }
+
+  .info {
+    flex: 1;
+    h1 { font-size: 3.5rem; margin: 0 0 1rem; }
+    .description { font-size: 1.2rem; line-height: 1.6; color: #ccc; max-width: 800px; }
+  }
+}
+
+.seasons-nav {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #333;
+  padding-bottom: 10px;
+
+  .season-tab {
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    border-radius: 4px;
+    color: #888;
+    transition: all 0.2s;
+
+    &.selected { color: white; border-bottom: 3px solid #e50914; }
+    &.active { background: rgba(229, 9, 20, 0.2); }
+  }
+}
+
+.episodes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.episode-card {
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 3px solid transparent;
+  transition: transform 0.3s;
+
+  &.active {
+    transform: scale(1.05);
+    border-color: #e50914;
+    .play-overlay { opacity: 1; }
+  }
+
+  .ep-thumbnail {
+    position: relative;
+    aspect-ratio: 16/9;
+    img { width: 100%; height: 100%; object-fit: cover; }
+    
+    .play-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+  }
+
+  .ep-info {
+    padding: 15px;
+    h3 { margin: 0 0 5px; font-size: 1rem; color: white; }
+    .ep-desc { 
+      margin: 0; 
+      font-size: 0.85rem; 
+      color: #999; 
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: white;
+  
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333;
+    border-top: 5px solid #e50914;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

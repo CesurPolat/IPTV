@@ -3,6 +3,7 @@ import { TvComponent } from './pages/tv/tv.component';
 import { HomeComponent } from './pages/home/home.component';
 import { PlayerComponent } from './pages/player/player.component';
 import { SearchComponent } from './pages/search/search.component';
+import { SeriesComponent } from './pages/series/series.component';
 import { MainLayoutComponent } from './components/layout/main-layout.component';
 
 export const routes: Routes = [
@@ -22,6 +23,10 @@ export const routes: Routes = [
             {
                 path: 'search',
                 component: SearchComponent
+            },
+            {
+                path: 'series',
+                component: SeriesComponent
             }
         ]
     },
