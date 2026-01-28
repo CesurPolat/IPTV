@@ -14,7 +14,6 @@ import { Updater } from 'capacitor-web-updater';
 })
 export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
-    @ViewChild('channelGrid') channelGrid!: ElementRef;
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
     allChannels: Channel[] = [];
@@ -24,7 +23,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     isLoading = true;
     activeIndex = 0;
     activeSection: 'channels' | 'series' = 'channels';
-    columns = 1;
 
     searchQuery = '';
     isListening = false;
@@ -53,7 +51,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
             // Wait for view to render
             setTimeout(() => {
-                this.calculateColumns();
                 this.activeIndex = 0;
                 this.scrollToActive();
             });
@@ -63,31 +60,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     ngAfterViewInit() {
-        this.channelCards.changes.subscribe(() => {
-            this.calculateColumns();
-        });
     }
 
     @HostListener('window:resize')
     onResize() {
-        this.calculateColumns();
-    }
-
-    calculateColumns() {
-        if (this.channelCards && this.channelCards.length > 0) {
-            const first = this.channelCards.get(0)?.nativeElement.getBoundingClientRect();
-            if (!first) return;
-
-            let colCount = 1;
-            for (let i = 1; i < this.channelCards.length; i++) {
-                const current = this.channelCards.get(i)?.nativeElement.getBoundingClientRect();
-                if (current.top > first.top + 10) { // +10 for some tolerance
-                    break;
-                }
-                colCount++;
-            }
-            this.columns = colCount;
-        }
     }
 
     @HostListener('window:keydown', ['$event'])
@@ -103,8 +79,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             case 'ArrowRight':
                 if (this.activeIndex < currentData.length - 1) {
                     this.activeIndex++;
-                } else if (this.activeSection === 'channels' && this.series.length > 0) {
-                    // Sayfa sonundan diğer bölüme geçme opsiyonu (isteğe bağlı)
                 }
                 break;
             case 'ArrowLeft':
@@ -113,19 +87,15 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 }
                 break;
             case 'ArrowUp':
-                if (this.activeIndex - this.columns >= 0) {
-                    this.activeIndex -= this.columns;
-                } else if (this.activeSection === 'series') {
+                if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
                     this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
                 }
                 break;
             case 'ArrowDown':
-                if (this.activeIndex + this.columns < currentData.length) {
-                    this.activeIndex += this.columns;
-                } else if (this.activeSection === 'channels' && this.series.length > 0) {
+                if (this.activeSection === 'channels' && this.series.length > 0) {
                     this.activeSection = 'series';
-                    this.activeIndex = 0;
+                    this.activeIndex = Math.min(this.activeIndex, this.series.length - 1);
                 }
                 break;
             case 'Enter':
@@ -149,7 +119,11 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             const targetCard = cards[this.activeIndex + indexOffset];
 
             if (targetCard) {
-                targetCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetCard.nativeElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'center'
+                });
             }
         });
     }
