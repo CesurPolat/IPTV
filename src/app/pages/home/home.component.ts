@@ -27,9 +27,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     activeSection: 'channels' | 'series' = 'channels';
     columns = 1;
 
-    appVersion: string = "0.3.6";
+    appVersion: string = "0.3.7";
     searchQuery = '';
     isListening = false;
+    private searchTimeout?: any;
 
     constructor(
         private tvChannelsService: TvChannelsService,
@@ -122,7 +123,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
         const currentData = this.activeSection === 'channels' ? this.channels : this.series;
         if (currentData.length === 0 && this.activeSection !== 'channels') return;
-        
+
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
         }
@@ -178,7 +179,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             const cards = this.channelCards.toArray();
             const indexOffset = this.activeSection === 'series' ? this.channels.length : 0;
             const targetCard = cards[this.activeIndex + indexOffset];
-            
+
             if (targetCard) {
                 targetCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
@@ -186,23 +187,48 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     filterResults() {
-        console.log('Arama sorgusu:', this.searchQuery);
-
         const query = this.searchQuery.toLowerCase().trim();
+        
+        // Yerel filtreleme (hızlı sonuç için)
         if (!query) {
             this.channels = [...this.allChannels];
             this.series = [...this.allSeries];
-        } else {
-            this.channels = this.allChannels.filter(c => 
-                c.name.toLowerCase().includes(query) || 
-                (c.currentShow && c.currentShow.toLowerCase().includes(query)) ||
-                c.category.toLowerCase().includes(query)
-            );
-            this.series = this.allSeries.filter(s => 
-                s.name.toLowerCase().includes(query) || 
-                s.category.toLowerCase().includes(query)
-            );
+            this.activeIndex = 0;
+            this.activeSection = 'channels';
+            this.scrollToActive();
+            return;
         }
+
+        this.channels = this.allChannels.filter(c =>
+            c.name.toLowerCase().includes(query) ||
+            (c.currentShow && c.currentShow.toLowerCase().includes(query))
+        );
+        this.series = this.allSeries.filter(s =>
+            s.name.toLowerCase().includes(query)
+        );
+
+        // API araması (debounced)
+        if (this.searchTimeout) clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(async () => {
+            if (query.length >= 2) {
+                const apiResults = await this.tvChannelsService.searchContent(query);
+                if (apiResults && apiResults.length > 0) {
+                    this.ngZone.run(() => {
+                        // API'den gelen sonuçları seriler listesine ekle (veya ayrı bir grupta göster)
+                        // Mevcut sonuçlarla birleştiriyoruz, mükerrerleri engelliyoruz
+                        apiResults.forEach(apiItem => {
+                            if (!this.series.find(s => s.name === apiItem.name)) {
+                                this.series.push(apiItem);
+                            }
+                        });
+                        this.activeIndex = 0;
+                        this.activeSection = this.channels.length > 0 ? 'channels' : 'series';
+                        this.scrollToActive();
+                    });
+                }
+            }
+        }, 500);
+
         this.activeIndex = 0;
         this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels');
         this.scrollToActive();
@@ -215,7 +241,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         }
 
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        
+
         if (!SpeechRecognition) {
             alert('Tarayıcınız ses tanıma özelliğini desteklemiyor.');
             return;
@@ -245,7 +271,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             this.ngZone.run(() => {
                 console.error('Ses tanıma hatası:', event.error);
                 this.isListening = false;
-                
+
                 if (event.error === 'network') {
                     alert('Ses tanıma hatası: İnternet bağlantısı kesildi veya konuşma servislerine ulaşılamıyor.');
                 } else if (event.error === 'not-allowed') {
