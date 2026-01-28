@@ -22,6 +22,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     series: Channel[] = [];
     isLoading = true;
     activeIndex = 0;
+    channelIndex = 0;
+    seriesIndex = 0;
     activeSection: 'channels' | 'series' = 'channels';
 
     searchQuery = '';
@@ -77,33 +79,49 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
         switch (event.key) {
             case 'ArrowRight':
-                if (this.activeIndex < currentData.length - 1) {
-                    this.activeIndex++;
+                if (this.activeSection === 'channels') {
+                    if (this.channelIndex < this.channels.length - 1) {
+                        this.channelIndex++;
+                        this.activeIndex = this.channelIndex;
+                    }
+                } else {
+                    if (this.seriesIndex < this.series.length - 1) {
+                        this.seriesIndex++;
+                        this.activeIndex = this.seriesIndex;
+                    }
                 }
                 break;
             case 'ArrowLeft':
-                if (this.activeIndex > 0) {
-                    this.activeIndex--;
+                if (this.activeSection === 'channels') {
+                    if (this.channelIndex > 0) {
+                        this.channelIndex--;
+                        this.activeIndex = this.channelIndex;
+                    }
+                } else {
+                    if (this.seriesIndex > 0) {
+                        this.seriesIndex--;
+                        this.activeIndex = this.seriesIndex;
+                    }
                 }
                 break;
             case 'ArrowUp':
                 if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
-                    this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
+                    this.activeIndex = this.channelIndex;
                 }
                 break;
             case 'ArrowDown':
                 if (this.activeSection === 'channels' && this.series.length > 0) {
                     this.activeSection = 'series';
-                    this.activeIndex = Math.min(this.activeIndex, this.series.length - 1);
+                    this.activeIndex = this.seriesIndex;
                 }
                 break;
             case 'Enter':
                 if (this.activeSection === 'channels') {
-                    const channel = this.channels[this.activeIndex];
+                    const channel = this.channels[this.channelIndex];
                     this.router.navigate(['/tv', channel.originalIndex]);
                 } else {
-                    const seriesItem = this.series[this.activeIndex];
+                    const seriesItem = this.series[this.seriesIndex];
                     // Diziler için yeni hazırladığımız player'a yönlendiriyoruz
                     this.router.navigate(['/player'], { queryParams: { url: seriesItem.source } });
                 }
@@ -136,6 +154,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             this.channels = [...this.allChannels];
             this.series = [...this.allSeries];
             this.activeIndex = 0;
+            this.channelIndex = 0;
+            this.seriesIndex = 0;
             this.activeSection = 'channels';
             this.scrollToActive();
             return;
@@ -164,6 +184,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                             }
                         });
                         this.activeIndex = 0;
+                        this.channelIndex = 0;
+                        this.seriesIndex = 0;
                         this.activeSection = this.channels.length > 0 ? 'channels' : 'series';
                         this.scrollToActive();
                     });
@@ -172,6 +194,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         }, 500);
 
         this.activeIndex = 0;
+        this.channelIndex = 0;
+        this.seriesIndex = 0;
         this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels');
         this.scrollToActive();
     }

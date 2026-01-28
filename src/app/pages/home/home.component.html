@@ -4,7 +4,7 @@
         <div class="channel-grid" #channelGrid>
             <div class="channel-card" *ngFor="let channel of channels; let i = index" 
                 [routerLink]="['/tv', channel.originalIndex]" #channelCard
-                [class.active]="activeSection === 'channels' && i === activeIndex"
+                [class.active]="activeSection === 'channels' && i === channelIndex"
                 tabindex="-1">
                 <div class="image-wrapper">
                     <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
@@ -26,7 +26,7 @@
         <div class="channel-grid">
             <div class="channel-card" *ngFor="let item of series; let i = index" #channelCard
                 [routerLink]="['/player']" [queryParams]="{ url: item.source }"
-                [class.active]="activeSection === 'series' && i === activeIndex"
+                [class.active]="activeSection === 'series' && i === seriesIndex"
                 tabindex="-1">
                 <div class="image-wrapper">
                     <img [src]="item.poster" [alt]="item.name" loading="lazy">
