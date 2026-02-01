@@ -12,7 +12,7 @@ import { Updater } from 'capacitor-web-updater';
 })
 export class AppComponent {
   title = 'IPTV';
-  appVersion: string = "0.3.7";
+  appVersion: string = "0.4.0";
 
 
   constructor() {
