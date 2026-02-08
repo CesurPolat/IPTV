@@ -6,6 +6,7 @@ import 'video.js/dist/video-js.css';
 import { App as CapacitorApp } from '@capacitor/app';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ArchillectTvComponent } from '../../components/archillect-tv/archillect-tv.component';
 
 
 
@@ -20,7 +21,7 @@ interface Quality {
 @Component({
   selector: 'app-tv',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ArchillectTvComponent],
   templateUrl: './tv.component.html',
   styleUrl: './tv.component.scss'
 })
@@ -38,11 +39,16 @@ export class TvComponent implements OnInit, OnDestroy {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
+  isAdPlaying: boolean = false;
   showChannelInfo: boolean = false;
   private infoTimeout: any;
   private backButtonListener: any;
 
-  constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
+  constructor(
+    private tvChannelsService: TvChannelsService,
+    private activatedRoute: ActivatedRoute,
+    private router: Router
+  ) { }
 
   ngOnInit() {
     this.fetchChannels();
@@ -95,6 +101,34 @@ export class TvComponent implements OnInit, OnDestroy {
     this.player.on('play', () => {
       this.showPlayIcon = false;
     });
+
+    // Oynatılan segment (TS) dosyalarını kontrol et
+    (videojs as any).Vhs.xhr.beforeRequest = (options: any) => {
+      if (options.uri && options.uri.includes('.ts')) {
+        console.log('Oynatılan TS Segmenti:', options.uri);
+
+        const currentChannel = this.channels[this.currentChannelIndex];
+        if (currentChannel?.adsRegex) {
+          try {
+            const regex = new RegExp(currentChannel.adsRegex);
+            if (regex.test(options.uri)) {
+              this.isAdPlaying = true;
+              if (this.player) this.player.muted(true);
+            } else {
+              this.isAdPlaying = false;
+              if (this.player) this.player.muted(false);
+            }
+          } catch (e) {
+            console.error('Invalid adsRegex:', currentChannel.adsRegex);
+          }
+        } else {
+          this.isAdPlaying = false;
+          if (this.player) this.player.muted(false);
+        }
+
+      }
+      return options;
+    };
 
     this.player.on('pause', () => {
       this.showPlayIcon = true;

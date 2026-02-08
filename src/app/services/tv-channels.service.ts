@@ -13,6 +13,7 @@ export interface Channel {
   channelId?: string;
   currentShow?: string;
   originalIndex?: number;
+  adsRegex?: string;
 }
 
 export interface DizipalEpisode {
