@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css?family=IBM+Plex+Mono:100,100i,200,200i,300,300i,400,400i,500,500i,600,600i,700,700i&display=swap');
+@import url('https://fonts.googleapis.com/css?family=IBM+Plex+Sans:100,100i,200,200i,300,300i,400,400i,500,500i,600,600i,700,700i&display=swap');
+
+:host {
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+
+#screenwrap, #screen, #screenfg, #screenbg {
+	width: 100%;
+	height: 100%;
+	position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#screenwrap {
+	overflow: hidden;
+	background-color: black;
+}
+
+#screen {
+	animation: zoom 60s infinite;
+	z-index: 0;
+}
+
+#screenoverlay {
+	font-family: 'IBM Plex Mono', monospace;
+	line-height: 1em;
+	z-index: 10;
+	padding: 20px;
+	color: white;
+	position: absolute;
+	bottom: 0;
+    left: 0;
+	display: flex;
+	align-items: center;
+    user-select: none;
+    text-decoration: none;
+}
+
+#gifid {
+	line-height: 24px;
+	margin: 0px 16px;
+    font-size: 14px;
+}
+
+#screenoverlay img {
+	width: 24px;
+	height: 24px;
+}
+
+#scplayer {
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1em;
+    z-index: 10;
+    padding: 20px;
+    color: white;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity 0.5s ease;
+    user-select: none;
+}
+
+#scsong {
+    line-height: 24px;
+    font-size: 14px;
+}
+
+#screenbg,
+#screenfg {
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+#screenfg {
+	background-size: contain;
+	z-index: 1;
+}
+
+#screenbg {
+	background-size: cover;
+	z-index: 0;
+    filter: blur(20px);
+    opacity: 0.5;
+}
+
+@keyframes zoom {
+	0% {
+		transform: scale(1, 1)
+	}
+
+	50% {
+		transform: scale(1.1, 1.1)
+	}
+
+	100% {
+		transform: scale(1, 1)
+	}
+}
