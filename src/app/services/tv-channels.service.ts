@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, tap, map, switchMap, firstValueFrom } from 'rxjs';
 import { NotificationService } from './notification.service';
+import { environment } from '../../environments/environment';
 
 export interface Channel {
   id: string;
@@ -49,7 +50,7 @@ export interface BroadcastSchedule {
 })
 export class TvChannelsService {
 
-  private static baseUrl = 'https://advanced-streaming.online';
+  private static baseUrl = environment.baseUrl;
 
   private channels: Channel[] = [];
 

@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SignalrService } from '../../services/signalr.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-archillect-tv',
@@ -27,7 +28,7 @@ export class ArchillectTvComponent implements OnInit, OnDestroy {
   constructor(private signalrService: SignalrService) {}
 
   ngOnInit() {
-    this.signalrService.startConnection('https://advanced-streaming.online/archillectTVHub');
+    this.signalrService.startConnection(environment.baseUrl + '/archillectTVHub');
     this.initSignalR();
     this.loadSoundCloudScript().then(() => {
       this.initSoundCloud();
