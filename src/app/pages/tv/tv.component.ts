@@ -307,6 +307,7 @@ export class TvComponent implements OnInit, OnDestroy {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         this.selectedIndex += event.key === 'ArrowUp' ? -1 : 1;
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.channels.length - 1));
+        this.fetchChannels();// If urls are expired, fetch channels again to get new urls
         this.changeChannel(this.selectedIndex);
       }
 
