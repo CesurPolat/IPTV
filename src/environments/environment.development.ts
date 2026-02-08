@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
   baseUrl: 'https://advanced-streaming.online',
-  version: '0.4.0'
+  version: '0.5.0'
 };
