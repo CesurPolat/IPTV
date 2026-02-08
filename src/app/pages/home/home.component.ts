@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
-import { Updater } from 'capacitor-web-updater';
 import { NavigationService } from '../../services/navigation.service';
 
 @Component({

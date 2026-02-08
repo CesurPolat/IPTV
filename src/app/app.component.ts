@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { NotificationComponent } from './components/notification/notification.component';
 import { Updater } from 'capacitor-web-updater';
+import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -12,7 +13,7 @@ import { Updater } from 'capacitor-web-updater';
 })
 export class AppComponent {
   title = 'IPTV';
-  appVersion: string = "0.4.0";
+  appVersion: string = environment.version;
 
 
   constructor() {

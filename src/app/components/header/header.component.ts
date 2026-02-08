@@ -2,8 +2,8 @@ import { Component, Input, Output, EventEmitter, ViewChild, ElementRef } from '@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { AppComponent } from '../../app.component';
 import { NavigationService } from '../../services/navigation.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-header',
@@ -25,7 +25,7 @@ import { NavigationService } from '../../services/navigation.service';
         <a routerLink="/search" routerLinkActive="active">Arama</a>
       </div> -->
       <div class="version-display">
-        v{{ app.appVersion }}
+        v{{ environment.version }}
       </div>
     </header>
   `,
@@ -115,6 +115,7 @@ import { NavigationService } from '../../services/navigation.service';
   `]
 })
 export class HeaderComponent {
+  environment = environment;
   @ViewChild('searchInput') searchInput!: ElementRef<HTMLInputElement>;
   searchQuery: string = '';
   isSearchActive: boolean = false;
@@ -122,7 +123,6 @@ export class HeaderComponent {
 
   constructor(
     private router: Router, 
-    public app: AppComponent,
     private navService: NavigationService
   ) {
     this.navService.isSearchSelected$.subscribe(active => {
