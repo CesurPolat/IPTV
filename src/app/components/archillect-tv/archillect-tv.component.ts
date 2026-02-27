@@ -13,7 +13,7 @@ import { environment } from '../../../environments/environment';
 export class ArchillectTvComponent implements OnInit, OnDestroy {
   @Input() height: string = '100%';
   @Input() width: string = '100%';
-  
+
   currentImage: string | null = null;
   currentIndex: number | null = null;
 
@@ -25,7 +25,7 @@ export class ArchillectTvComponent implements OnInit, OnDestroy {
   //private stamp = 0; // Fallback or server sync
   private stamp = Math.floor(Math.random() * 360000000000);
 
-  constructor(private signalrService: SignalrService) {}
+  constructor(private signalrService: SignalrService) { }
 
   ngOnInit() {
     this.signalrService.startConnection(environment.baseUrl + '/archillectTVHub');
@@ -75,7 +75,7 @@ export class ArchillectTvComponent implements OnInit, OnDestroy {
     iframe.setAttribute("allow", "autoplay");
     iframe.style.display = "none";
     iframe.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(scurl)}`;
-    
+
     const container = document.getElementById('sc-container');
     if (container) {
       container.appendChild(iframe);
@@ -177,10 +177,14 @@ export class ArchillectTvComponent implements OnInit, OnDestroy {
     this.signalrService.removeListener('ReceiveArchillectUpdate');
     this.signalrService.stopConnection();
     if (this.scWidget) {
-      this.scWidget.unbind((window as any).SC.Widget.Events.READY);
-      this.scWidget.unbind((window as any).SC.Widget.Events.PLAY);
-      this.scWidget.unbind((window as any).SC.Widget.Events.PAUSE);
-      this.scWidget.unbind((window as any).SC.Widget.Events.FINISH);
+      try {
+        this.scWidget.unbind((window as any).SC.Widget.Events.READY);
+        this.scWidget.unbind((window as any).SC.Widget.Events.PLAY);
+        this.scWidget.unbind((window as any).SC.Widget.Events.PAUSE);
+        this.scWidget.unbind((window as any).SC.Widget.Events.FINISH);
+      } catch (error) {
+        console.error('Error unbinding SoundCloud widget events:', error);
+      }
     }
   }
 }

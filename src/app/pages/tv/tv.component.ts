@@ -103,32 +103,44 @@ export class TvComponent implements OnInit, OnDestroy {
     });
 
     // Oynatılan segment (TS) dosyalarını kontrol et
-    (videojs as any).Vhs.xhr.beforeRequest = (options: any) => {
-      if (options.uri && options.uri.includes('.ts')) {
-        console.log('Oynatılan TS Segmenti:', options.uri);
+    this.player.on('timeupdate', () => {
+      const vhs = (this.player as any).tech(true).vhs;
 
-        const currentChannel = this.channels[this.currentChannelIndex];
-        if (currentChannel?.adsRegex) {
-          try {
+      // Canlı yayınlarda playlist sürekli yenilenir
+      const media = vhs?.playlists?.media();
+
+      if (media && media.segments) {
+        const currentTime = this.player.currentTime();
+
+        /**
+         * CANLI YAYIN İÇİN KRİTİK NOKTA:
+         * vhs.segmentXhrTime o anki segmentin oynatılma zamanını takip eder.
+         * Ancak en garantisi 'syncController' üzerinden o anki segmenti bulmaktır.
+         */
+        const currentSegment = media.segments.find((seg: { start: number; duration: any; }) =>
+          currentTime >= seg.start && currentTime < (seg.start + seg.duration)
+        );
+
+        if (currentSegment && currentSegment.resolvedUri) {
+          const uri = currentSegment.resolvedUri;
+          const currentChannel = this.channels[this.currentChannelIndex];
+
+          if (currentChannel?.adsRegex) {
             const regex = new RegExp(currentChannel.adsRegex);
-            if (regex.test(options.uri)) {
-              this.isAdPlaying = true;
-              if (this.player) this.player.muted(true);
-            } else {
-              this.isAdPlaying = false;
-              if (this.player) this.player.muted(false);
-            }
-          } catch (e) {
-            console.error('Invalid adsRegex:', currentChannel.adsRegex);
-          }
-        } else {
-          this.isAdPlaying = false;
-          if (this.player) this.player.muted(false);
-        }
+            const isAd = regex.test(uri);
 
+            if (this.isAdPlaying !== isAd) {
+              this.isAdPlaying = isAd;
+              this.player.muted(isAd);
+              console.log(isAd ? 'REKLAM SESSİZE ALINDI' : 'YAYIN DEVAM EDİYOR');
+            }
+
+            // Debug için log (Sorgulamanın durup durmadığını buradan görebilirsin)
+            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd);
+          }
+        }
       }
-      return options;
-    };
+    });
 
     this.player.on('pause', () => {
       this.showPlayIcon = true;
