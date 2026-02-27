@@ -105,18 +105,11 @@ export class TvComponent implements OnInit, OnDestroy {
     // Oynatılan segment (TS) dosyalarını kontrol et
     this.player.on('timeupdate', () => {
       const vhs = (this.player as any).tech(true).vhs;
-
-      // Canlı yayınlarda playlist sürekli yenilenir
       const media = vhs?.playlists?.media();
 
       if (media && media.segments) {
         const currentTime = this.player.currentTime();
 
-        /**
-         * CANLI YAYIN İÇİN KRİTİK NOKTA:
-         * vhs.segmentXhrTime o anki segmentin oynatılma zamanını takip eder.
-         * Ancak en garantisi 'syncController' üzerinden o anki segmenti bulmaktır.
-         */
         const currentSegment = media.segments.find((seg: { start: number; duration: any; }) =>
           currentTime >= seg.start && currentTime < (seg.start + seg.duration)
         );
@@ -129,13 +122,27 @@ export class TvComponent implements OnInit, OnDestroy {
             const regex = new RegExp(currentChannel.adsRegex);
             const isAd = regex.test(uri);
 
+            // --- ATALAMA MANTIĞI BURADA BAŞLIYOR ---
+            if (isAd) {
+              // Playlist içinde reklam OLMAYAN bir sonraki segmenti ara
+              const nextCleanSegment = media.segments.find((seg: any) =>
+                seg.start > currentTime && !regex.test(seg.resolvedUri)
+              );
+
+              if (nextCleanSegment) {
+                console.log('Reklam tespit edildi, temiz segmente atlanıyor:', nextCleanSegment.start);
+                this.player.currentTime(nextCleanSegment.start);
+                return; // Atladığımız için bu cycle'ı burada bitiriyoruz
+              }
+            }
+            // --- ATALAMA MANTIĞI BURADA BİTİYOR ---
+
             if (this.isAdPlaying !== isAd) {
               this.isAdPlaying = isAd;
               this.player.muted(isAd);
               console.log(isAd ? 'REKLAM SESSİZE ALINDI' : 'YAYIN DEVAM EDİYOR');
             }
 
-            // Debug için log (Sorgulamanın durup durmadığını buradan görebilirsin)
             console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd);
           }
         }
