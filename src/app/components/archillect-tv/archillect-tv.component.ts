@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, Input } from '@angular/core';
+import { Component, OnInit, OnDestroy, Input, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SignalrService } from '../../services/signalr.service';
 import { environment } from '../../../environments/environment';
@@ -24,8 +24,29 @@ export class ArchillectTvComponent implements OnInit, OnDestroy {
   private scriptStart = new Date().getTime();
   //private stamp = 0; // Fallback or server sync
   private stamp = Math.floor(Math.random() * 360000000000);
+  isMuted: boolean = false;
 
   constructor(private signalrService: SignalrService) { }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeyDown(event: KeyboardEvent) {
+    // Orta tuş (Enter veya OK butonu uzaktan kumandada)
+    if (event.key === 'Enter') {
+      this.toggleMute();
+    }
+  }
+
+  private toggleMute() {
+    if (!this.scWidget) return;
+    
+    this.isMuted = !this.isMuted;
+    
+    if (this.isMuted) {
+      this.scWidget.setVolume(0);
+    } else {
+      this.scWidget.setVolume(50);
+    }
+  }
 
   ngOnInit() {
     this.signalrService.startConnection(environment.baseUrl + '/archillectTVHub');

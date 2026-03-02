@@ -270,7 +270,7 @@ export class TvComponent implements OnInit, OnDestroy {
       if (this.isMenuOpen && this.selectedIndex != -1) {
         this.changeChannel(this.selectedIndex);
         this.isMenuOpen = false;
-      } else if (this.player) {
+      } else if (this.player && !this.isAdPlaying) {
         if (this.player.paused()) {
           this.player.play();
         } else {
