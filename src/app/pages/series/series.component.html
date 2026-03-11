@@ -1,0 +1,50 @@
+<div class="series-page" *ngIf="!isLoading && seriesData">
+  <div class="backdrop" [style.backgroundImage]="'url(' + seriesData.image + ')'">
+    <div class="overlay"></div>
+  </div>
+
+  <div class="content">
+    <div class="series-header">
+      <!-- <div class="poster">
+        <img [src]="seriesData.image" [alt]="seriesData.name">
+      </div> -->
+      <div class="info">
+        <h1>{{seriesData.name}}</h1>
+        <p class="description">{{seriesData.description}}</p>
+      </div>
+    </div>
+
+    <div class="seasons-nav">
+      <div class="season-tab" 
+           *ngFor="let season of seasons; let i = index"
+           #seasonTab
+           [class.active]="activeSection === 'seasons' && activeSeasonIndex === i"
+           [class.selected]="selectedSeason === season"
+           (click)="selectSeason(i)">
+        {{season.name}}
+      </div>
+    </div>
+
+    <div class="episodes-grid">
+      <div class="episode-card" 
+           *ngFor="let episode of selectedSeason?.episodes; let i = index"
+           #episodeCard
+           [class.active]="activeSection === 'episodes' && activeEpisodeIndex === i"
+           (click)="playEpisode(episode, i)">
+        <div class="ep-thumbnail">
+          <img [src]="seriesData.image" alt="Episode thumb">
+          <div class="play-overlay">▶</div>
+        </div>
+        <div class="ep-info">
+          <h3>{{episode.name}}</h3>
+          <p class="ep-desc" *ngIf="episode.description">{{episode.description}}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="loading" *ngIf="isLoading">
+  <div class="spinner"></div>
+  <p>Dizi detayları yükleniyor...</p>
+</div>

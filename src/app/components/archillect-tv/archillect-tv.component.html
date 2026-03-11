@@ -1,0 +1,21 @@
+<div id="screenwrap" [style.height]="height" [style.width]="width">
+  <div id="screen">
+    <div id="screenbg" *ngIf="currentImage" [style.background-image]="'url(' + currentImage + ')'"></div>
+    <div id="screenfg" *ngIf="currentImage" [style.background-image]="'url(' + currentImage + ')'"></div>
+  </div>
+</div>
+
+<div id="screenoverlay" *ngIf="currentImage">
+  <img src="assets/img/logo_white.svg" alt="Archillect Logo" (error)="$any($event.target).style.display='none'">
+  <div id="gifid" *ngIf="currentIndex">#{{currentIndex}}</div>
+</div>
+
+<a [href]="scPermalink" target="_blank" id="scplayer" [style.opacity]="scPlaying ? 1 : 0">
+  <div id="scsong">{{ scTitle }}</div>
+</a>
+
+<div id="muted-indicator" *ngIf="isMuted">[Susturuldu]</div>
+
+<div id="sc-container" style="display: none;"></div>
+
+

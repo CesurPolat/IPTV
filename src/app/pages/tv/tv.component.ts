@@ -6,6 +6,7 @@ import 'video.js/dist/video-js.css';
 import { App as CapacitorApp } from '@capacitor/app';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ArchillectTvComponent } from '../../components/archillect-tv/archillect-tv.component';
 
 
 
@@ -20,7 +21,7 @@ interface Quality {
 @Component({
   selector: 'app-tv',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ArchillectTvComponent],
   templateUrl: './tv.component.html',
   styleUrl: './tv.component.scss'
 })
@@ -38,11 +39,16 @@ export class TvComponent implements OnInit, OnDestroy {
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
   isQualitySelectorActive: boolean = false;
+  isAdPlaying: boolean = false;
   showChannelInfo: boolean = false;
   private infoTimeout: any;
   private backButtonListener: any;
 
-  constructor(private tvChannelsService: TvChannelsService, private activatedRoute: ActivatedRoute, private router: Router) { }
+  constructor(
+    private tvChannelsService: TvChannelsService,
+    private activatedRoute: ActivatedRoute,
+    private router: Router
+  ) { }
 
   ngOnInit() {
     this.fetchChannels();
@@ -94,6 +100,53 @@ export class TvComponent implements OnInit, OnDestroy {
 
     this.player.on('play', () => {
       this.showPlayIcon = false;
+    });
+
+    // Oynatılan segment (TS) dosyalarını kontrol et
+    this.player.on('timeupdate', () => {
+      const vhs = (this.player as any).tech(true).vhs;
+      const media = vhs?.playlists?.media();
+
+      if (media && media.segments) {
+        const currentTime = this.player.currentTime();
+
+        const currentSegment = media.segments.find((seg: { start: number; duration: any; }) =>
+          currentTime >= seg.start && currentTime < (seg.start + seg.duration)
+        );
+
+        if (currentSegment && currentSegment.resolvedUri) {
+          const uri = currentSegment.resolvedUri;
+          const currentChannel = this.channels[this.currentChannelIndex];
+
+          if (currentChannel?.adsRegex) {
+            const regex = new RegExp(currentChannel.adsRegex);
+            const isAd = regex.test(uri);
+
+            // --- ATALAMA MANTIĞI BURADA BAŞLIYOR ---
+            if (isAd) {
+              // Playlist içinde reklam OLMAYAN bir sonraki segmenti ara
+              const nextCleanSegment = media.segments.find((seg: any) =>
+                seg.start > currentTime && !regex.test(seg.resolvedUri)
+              );
+
+              if (nextCleanSegment) {
+                console.log('Reklam tespit edildi, temiz segmente atlanıyor:', nextCleanSegment.start);
+                this.player.currentTime(nextCleanSegment.start);
+                return; // Atladığımız için bu cycle'ı burada bitiriyoruz
+              }
+            }
+            // --- ATALAMA MANTIĞI BURADA BİTİYOR ---
+
+            if (this.isAdPlaying !== isAd) {
+              this.isAdPlaying = isAd;
+              this.player.muted(isAd);
+              console.log(isAd ? 'REKLAM SESSİZE ALINDI' : 'YAYIN DEVAM EDİYOR');
+            }
+
+            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd);
+          }
+        }
+      }
     });
 
     this.player.on('pause', () => {
@@ -217,7 +270,7 @@ export class TvComponent implements OnInit, OnDestroy {
       if (this.isMenuOpen && this.selectedIndex != -1) {
         this.changeChannel(this.selectedIndex);
         this.isMenuOpen = false;
-      } else if (this.player) {
+      } else if (this.player && !this.isAdPlaying) {
         if (this.player.paused()) {
           this.player.play();
         } else {
@@ -273,6 +326,7 @@ export class TvComponent implements OnInit, OnDestroy {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         this.selectedIndex += event.key === 'ArrowUp' ? -1 : 1;
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.channels.length - 1));
+        this.fetchChannels();// If urls are expired, fetch channels again to get new urls
         this.changeChannel(this.selectedIndex);
       }
 

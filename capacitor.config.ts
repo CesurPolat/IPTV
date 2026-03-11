@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist/iptv/browser',
   plugins: {
     
-    Updater: {
+    Updater: {//TODO: Implement the updater plugin
       autoUpdate: true,
       updateUrl: 'https://advanced-streaming.online/iptv/update.json',
       checkInterval: 3600 // Check for updates every hour

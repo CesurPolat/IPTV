@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
-import { Updater } from 'capacitor-web-updater';
+import { NavigationService } from '../../services/navigation.service';
 
 @Component({
     selector: 'app-home',
@@ -14,8 +14,6 @@ import { Updater } from 'capacitor-web-updater';
 })
 export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
-    @ViewChild('channelGrid') channelGrid!: ElementRef;
-    @ViewChild('searchInput') searchInput!: ElementRef;
     @ViewChildren('channelCard') channelCards!: QueryList<ElementRef>;
 
     allChannels: Channel[] = [];
@@ -24,10 +22,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     series: Channel[] = [];
     isLoading = true;
     activeIndex = 0;
+    channelIndex = 0;
+    seriesIndex = 0;
     activeSection: 'channels' | 'series' = 'channels';
-    columns = 1;
 
-    appVersion: string = "0.3.7";
     searchQuery = '';
     isListening = false;
     private searchTimeout?: any;
@@ -35,7 +33,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     constructor(
         private tvChannelsService: TvChannelsService,
         private router: Router,
-        private ngZone: NgZone
+        private ngZone: NgZone,
+        private navService: NavigationService
     ) { }
 
     ngOnInit() {
@@ -55,69 +54,25 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
             // Wait for view to render
             setTimeout(() => {
-                this.calculateColumns();
                 this.activeIndex = 0;
                 this.scrollToActive();
             });
         });
 
-        Updater.echo({ value: 'Capacitor Web Updater is ready!' });
 
-        Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
-            if (!result.value) {
-                console.log('Yeni bir güncelleme mevcut');
-                // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
-                Updater.getLatestVersion().then((latestVersion) => {
-                    console.log('En son sürüm:', latestVersion.value);
-                    document.location.href = 'index.html';
-                });
-
-            } else {
-                console.log('Uygulama en son sürümde.');
-            }
-        }).catch((error) => {
-            console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
-        });
     }
 
     ngAfterViewInit() {
-        this.channelCards.changes.subscribe(() => {
-            this.calculateColumns();
-        });
     }
 
     @HostListener('window:resize')
     onResize() {
-        this.calculateColumns();
-    }
-
-    calculateColumns() {
-        if (this.channelCards && this.channelCards.length > 0) {
-            const first = this.channelCards.get(0)?.nativeElement.getBoundingClientRect();
-            if (!first) return;
-
-            let colCount = 1;
-            for (let i = 1; i < this.channelCards.length; i++) {
-                const current = this.channelCards.get(i)?.nativeElement.getBoundingClientRect();
-                if (current.top > first.top + 10) { // +10 for some tolerance
-                    break;
-                }
-                colCount++;
-            }
-            this.columns = colCount;
-        }
     }
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
-        if ((event.target as HTMLElement).tagName === 'INPUT') {
-            if (event.key === 'ArrowDown') {
-                this.searchInput.nativeElement.blur();
-                this.activeSection = 'channels';
-                this.activeIndex = 0;
-                this.scrollToActive();
-                event.preventDefault();
-            }
+        // Eğer input odaklıysa ve Escape değilse özel navigasyonu pas geç
+        if (document.activeElement?.tagName === 'INPUT' && event.key !== 'Escape' && event.key !== 'Enter') {
             return;
         }
 
@@ -128,44 +83,59 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             event.preventDefault();
         }
 
+        if (event.key === 'Escape') {
+            (document.activeElement as HTMLElement)?.blur();
+            return;
+        }
+
         switch (event.key) {
             case 'ArrowRight':
-                if (this.activeIndex < currentData.length - 1) {
-                    this.activeIndex++;
-                } else if (this.activeSection === 'channels' && this.series.length > 0) {
-                    // Sayfa sonundan diğer bölüme geçme opsiyonu (isteğe bağlı)
+                if (this.activeSection === 'channels') {
+                    if (this.channelIndex < this.channels.length - 1) {
+                        this.channelIndex++;
+                        this.activeIndex = this.channelIndex;
+                    }
+                } else {
+                    if (this.seriesIndex < this.series.length - 1) {
+                        this.seriesIndex++;
+                        this.activeIndex = this.seriesIndex;
+                    }
                 }
                 break;
             case 'ArrowLeft':
-                if (this.activeIndex > 0) {
-                    this.activeIndex--;
+                if (this.activeSection === 'channels') {
+                    if (this.channelIndex > 0) {
+                        this.channelIndex--;
+                        this.activeIndex = this.channelIndex;
+                    }
+                } else {
+                    if (this.seriesIndex > 0) {
+                        this.seriesIndex--;
+                        this.activeIndex = this.seriesIndex;
+                    }
                 }
                 break;
             case 'ArrowUp':
-                if (this.activeIndex - this.columns >= 0) {
-                    this.activeIndex -= this.columns;
+                if (this.activeSection === 'channels') {
+                    this.navService.setSearchSelected(true);
+                    this.router.navigate(['/search']);
                 } else if (this.activeSection === 'series') {
                     this.activeSection = 'channels';
-                    this.activeIndex = Math.min(this.activeIndex, this.channels.length - 1);
-                } else if (this.activeSection === 'channels' && this.activeIndex < this.columns) {
-                    this.searchInput.nativeElement.focus();
-                    event.preventDefault();
+                    this.activeIndex = this.channelIndex;
                 }
                 break;
             case 'ArrowDown':
-                if (this.activeIndex + this.columns < currentData.length) {
-                    this.activeIndex += this.columns;
-                } else if (this.activeSection === 'channels' && this.series.length > 0) {
+                if (this.activeSection === 'channels' && this.series.length > 0) {
                     this.activeSection = 'series';
-                    this.activeIndex = 0;
+                    this.activeIndex = this.seriesIndex;
                 }
                 break;
             case 'Enter':
                 if (this.activeSection === 'channels') {
-                    const channel = this.channels[this.activeIndex];
+                    const channel = this.channels[this.channelIndex];
                     this.router.navigate(['/tv', channel.originalIndex]);
-                } else {
-                    const seriesItem = this.series[this.activeIndex];
+                } else if (this.activeSection === 'series') {
+                    const seriesItem = this.series[this.seriesIndex];
                     // Diziler için yeni hazırladığımız player'a yönlendiriyoruz
                     this.router.navigate(['/player'], { queryParams: { url: seriesItem.source } });
                 }
@@ -181,7 +151,11 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             const targetCard = cards[this.activeIndex + indexOffset];
 
             if (targetCard) {
-                targetCard.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetCard.nativeElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'center'
+                });
             }
         });
     }
@@ -194,6 +168,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             this.channels = [...this.allChannels];
             this.series = [...this.allSeries];
             this.activeIndex = 0;
+            this.channelIndex = 0;
+            this.seriesIndex = 0;
             this.activeSection = 'channels';
             this.scrollToActive();
             return;
@@ -222,6 +198,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                             }
                         });
                         this.activeIndex = 0;
+                        this.channelIndex = 0;
+                        this.seriesIndex = 0;
                         this.activeSection = this.channels.length > 0 ? 'channels' : 'series';
                         this.scrollToActive();
                     });
@@ -230,6 +208,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         }, 500);
 
         this.activeIndex = 0;
+        this.channelIndex = 0;
+        this.seriesIndex = 0;
         this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels');
         this.scrollToActive();
     }
@@ -299,7 +279,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     ngOnDestroy() {
-
+        this.navService.setSearchSelected(false);
     }
 
 }

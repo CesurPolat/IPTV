@@ -1,0 +1,30 @@
+<div class="search-page">
+  <div class="container">
+    <h2 class="search-title" *ngIf="query">"{{query}}" için arama sonuçları</h2>
+    
+    <div *ngIf="isLoading" class="loading">Aranıyor...</div>
+
+    <div *ngIf="!isLoading && results.length === 0" class="no-results">
+      Sonuç bulunamadı.
+    </div>
+
+    <div class="results-grid" *ngIf="results.length > 0">
+      <div class="result-card" *ngFor="let item of results; let i = index" 
+           #resultCard
+           [class.active]="activeSection === 'results' && i === activeIndex"
+           [routerLink]="item.category === 'Series' ? ['/series'] : ['/player']" 
+           [queryParams]="{ url: item.source }">
+        <div class="image-wrapper">
+          <img [src]="item.poster" [alt]="item.name" onerror="this.src='assets/placeholder.jpg'">
+          <div class="overlay">
+            <span class="play-btn">▶</span>
+          </div>
+        </div>
+        <div class="card-info">
+          <h3>{{item.name}}</h3>
+          <p>{{item.category}}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

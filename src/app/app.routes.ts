@@ -2,16 +2,33 @@ import { Routes } from '@angular/router';
 import { TvComponent } from './pages/tv/tv.component';
 import { HomeComponent } from './pages/home/home.component';
 import { PlayerComponent } from './pages/player/player.component';
+import { SearchComponent } from './pages/search/search.component';
+import { SeriesComponent } from './pages/series/series.component';
+import { MainLayoutComponent } from './components/layout/main-layout.component';
 
 export const routes: Routes = [
     {
         path: '',
-        redirectTo: 'home',
-        pathMatch: 'full'
-    },
-    {
-        path: 'home',
-        component: HomeComponent
+        component: MainLayoutComponent,
+        children: [
+            {
+                path: '',
+                redirectTo: 'home',
+                pathMatch: 'full'
+            },
+            {
+                path: 'home',
+                component: HomeComponent
+            },
+            {
+                path: 'search',
+                component: SearchComponent
+            },
+            {
+                path: 'series',
+                component: SeriesComponent
+            }
+        ]
     },
     {
         path: 'tv/:id',

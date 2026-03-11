@@ -18,6 +18,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   currentTime = 0;
   duration = 0;
   showControls = true;
+  private currentUrl = '';
   private controlsTimeout?: any;
   private backButtonListener: any;
 
@@ -47,6 +48,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.savePosition();
     if (this.player) {
       this.player.dispose();
     }
@@ -55,6 +57,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.backButtonListener) {
       this.backButtonListener.remove();
+    }
+  }
+
+  @HostListener('window:beforeunload')
+  savePosition() {
+    if (this.player && this.currentUrl) {
+      const currentTime = this.player.currentTime();
+      // Eğer videonun sonuna çok yakınsa (son 10 saniye), kaldığı yeri temizle ki baştan başlasın
+      if (this.duration > 0 && this.duration - currentTime < 10) {
+        localStorage.removeItem(`playback_pos_${this.currentUrl}`);
+      } else {
+        localStorage.setItem(`playback_pos_${this.currentUrl}`, currentTime.toString());
+      }
     }
   }
 
@@ -149,9 +164,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   initializePlayer(url: string) {
     if (this.player) {
+      this.savePosition();
       this.player.dispose();
     }
 
+    this.currentUrl = url;
     const type = this.getVideoType(url);
 
     this.player = videojs('my-video', {
@@ -179,6 +196,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
     this.player.on('loadedmetadata', () => {
       this.duration = this.player.duration();
+      const savedPos = localStorage.getItem(`playback_pos_${this.currentUrl}`);
+      if (savedPos) {
+        this.player.currentTime(parseFloat(savedPos));
+      }
       this.cdr.detectChanges();
     });
   }

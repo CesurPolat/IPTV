@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, tap, map, switchMap } from 'rxjs';
-import { CapacitorHttp } from '@capacitor/core';
+import { Observable, of, tap, map, switchMap, firstValueFrom } from 'rxjs';
+import { NotificationService } from './notification.service';
+import { environment } from '../../environments/environment';
 
 export interface Channel {
   id: string;
@@ -13,6 +14,28 @@ export interface Channel {
   channelId?: string;
   currentShow?: string;
   originalIndex?: number;
+  adsRegex?: string;
+}
+
+export interface DizipalEpisode {
+  name: string;
+  url: string;
+  episodeNumber: number;
+  description?: string;
+}
+
+export interface DizipalSeason {
+  seasonNumber: number;
+  numberOfEpisodes: number;
+  episode: DizipalEpisode | DizipalEpisode[];
+}
+
+export interface DizipalSeriesDetail {
+  name: string;
+  description: string;
+  image: string;
+  url: string;
+  containsSeason: DizipalSeason | DizipalSeason[];
 }
 
 export interface BroadcastSchedule {
@@ -27,11 +50,14 @@ export interface BroadcastSchedule {
 })
 export class TvChannelsService {
 
-  private static baseUrl = 'https://advanced-streaming.online';
+  private static baseUrl = environment.baseUrl;
 
   private channels: Channel[] = [];
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private notificationService: NotificationService
+  ) { }
 
   loadChannels(): Observable<Channel[]> {
     const hasChannels = this.channels.length > 0;
@@ -74,20 +100,11 @@ export class TvChannelsService {
     if (!searchTerm || searchTerm.length < 2) return [];
 
     try {
-      const response = await CapacitorHttp.post({
-        url: (await this.resolveRedirect())+'bg/searchcontent',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        data: `searchterm=${encodeURIComponent(searchTerm)}`
-      });
+      const results = await firstValueFrom(
+        this.http.get<any[]>(`${TvChannelsService.baseUrl}/streaming/Search?searchTerm=${encodeURIComponent(searchTerm)}`)
+      );
 
-      // User'ın paylaştığı yapıya göre: response.data.data.result
-      const results = response.data?.data?.result || [];
-      
-      return results.map((item: any) => ({
+      return (results || []).map((item: any) => ({
         id: item.object_id.toString(),
         name: item.object_name,
         poster: item.object_poster_url,
@@ -98,50 +115,49 @@ export class TvChannelsService {
       }));
     } catch (error) {
       console.error('Search content error:', error);
+      this.notificationService.showError('İçerik aranırken bir hata oluştu: ' + error);
       return [];
     }
   }
 
-    async resolveRedirect(url: string = 'https://dizipal1535.com/'): Promise<string> {
+  async getSeriesDetails(seriesId: string): Promise<DizipalSeriesDetail | null> {
+    if (!seriesId) return null;
+
     try {
-      // redirectdetective.com servisini kullanarak yönlendirmeyi dış servis üzerinden buluyoruz
-      const response = await CapacitorHttp.post({
-        url: 'https://redirectdetective.com/ld.px',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded',
-          'referer': 'https://redirectdetective.com/',
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        data: `w=${encodeURIComponent(url)}&f=true`
-      });
-
-      const html = response.data;
-      if (!html) return url;
-
-      // Dönen HTML içerisindeki tüm href linklerini ayıklıyoruz
-      const regex = /href="(https?:\/\/[^"]+)"/g;
-      let matches;
-      let urls: string[] = [];
+      const result = await firstValueFrom(
+        this.http.get<DizipalSeriesDetail>(`${TvChannelsService.baseUrl}/Streaming/GetSeriesDetail?seriesId=${encodeURIComponent(seriesId)}`)
+      );
       
-      while ((matches = regex.exec(html)) !== null) {
-        let foundUrl = matches[1].trim();
-        // Orijinal URL'den farklı olan yeni bir URL bulursak listeye ekliyoruz
-        if (foundUrl !== url && !urls.includes(foundUrl)) {
-          urls.push(foundUrl);
-        }
+      if (result && result.image) {
+        result.image = result.image.replace('f/f', '1920/1080');
       }
 
-      // Eğer yönlendirme zinciri bulunduysa, listedeki en son (güncel) URL'i dönüyoruz
-      if (urls.length > 0) {
-        const finalUrl = urls[urls.length - 1];
-        console.log('[Redirect] Redirect detected via external service:', url, '->', finalUrl);
-        return finalUrl;
-      }
-
-      return url;
+      const seasons = Array.isArray(result.containsSeason) ? result.containsSeason : [result.containsSeason];
+      seasons.forEach((season: DizipalSeason) => {
+        const episodes = Array.isArray(season.episode) ? season.episode : [season.episode];
+        episodes.forEach(episode => {
+          if (episode && episode.url) {
+            episode.url = `${TvChannelsService.baseUrl}/Streaming/GetMediaUrl?url=${encodeURIComponent(episode.url)}`;
+          }
+        });
+      });
+      
+      return result;
     } catch (error) {
-      console.error('Redirect resolve error:', error);
-      return url;
+      console.error('Get series details error:', error);
+      this.notificationService.showError('Dizi detayları yüklenirken bir hata oluştu');
+      return null;
     }
   }
+
+  async getVideoUrl(proxyUrl: string): Promise<string> {
+    try {
+      const response = await fetch(proxyUrl);
+      return response.text();
+    } catch (error) {
+      console.error('Get video URL error:', error);
+      return proxyUrl;
+    }
+  }
+
 }

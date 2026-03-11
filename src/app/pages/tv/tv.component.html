@@ -1,11 +1,13 @@
 <div class="video-container">
-    <video id="my-video" class="video-js vjs-default-skin" playsinline>
+    <video id="my-video" class="video-js vjs-default-skin" [class.hidden]="isAdPlaying" playsinline>
         <source poster="/assets/poster.png" type="video/mp4">
         <p class="vjs-no-js">
             Video.js'i görüntülemek için lütfen JavaScript'i etkinleştirin
         </p>
     </video>
-    <div class="play-icon" [class.hidden]="!showPlayIcon" (click)="playVideo()"></div>
+    <div class="play-icon" [class.hidden]="!showPlayIcon || isAdPlaying" (click)="playVideo()"></div>
+    
+    <app-archillect-tv *ngIf="isAdPlaying"></app-archillect-tv>
 </div>
 
 <div class="channel-info-panel" [class.show]="showChannelInfo" *ngIf="channels[currentChannelIndex]">
