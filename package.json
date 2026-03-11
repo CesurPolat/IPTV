@@ -5,6 +5,7 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "build:nodejs": "tsc -p tsconfig.nodejs.json",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
@@ -25,6 +26,7 @@
     "@capacitor/ios": "^7.1.0",
     "@microsoft/signalr": "^10.0.0",
     "@types/video.js": "^7.3.58",
+    "capacitor-nodejs": "https://github.com/hampoelz/capacitor-nodejs/releases/download/v1.0.0-beta.9/capacitor-nodejs.tgz",
     "capacitor-web-updater": "file:../capacitor-web-updater",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

@@ -5,5 +5,8 @@ project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/android')
 
+include ':capacitor-nodejs'
+project(':capacitor-nodejs').projectDir = new File('../node_modules/capacitor-nodejs/android')
+
 include ':capacitor-web-updater'
 project(':capacitor-web-updater').projectDir = new File('../../capacitor-web-updater/android')
