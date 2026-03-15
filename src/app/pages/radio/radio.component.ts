@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, CUSTOM_ELEMENTS_SCHEMA, HostListener, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { App } from '@capacitor/app';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { matPlayArrow, matPause, matSkipNext, matSkipPrevious } from '@ng-icons/material-icons/baseline';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
@@ -20,7 +21,7 @@ import Player from 'video.js/dist/types/player';
 export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('channelList') channelList!: ElementRef;
   @ViewChild('audioPlayer', { static: false }) audioPlayerRef!: ElementRef;
-  
+
   player: Player | null = null;
   channels: Channel[] = [
     {
@@ -87,16 +88,17 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
       category: 'Radio'
     }
   ];
-  
+
   currentChannelIndex: number = 0;
   isPlaying: boolean = false;
   isChanging: boolean = false;
   private subscription: Subscription = new Subscription();
+  private backButtonListener: any;
 
   constructor(
     private tvChannelsService: TvChannelsService,
     private router: Router
-  ) {}
+  ) { }
 
   ngAfterViewInit() {
     this.initPlayer();
@@ -174,6 +176,14 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.channels.length > 0) {
       this.currentChannelIndex = 0;
     }
+    this.setupBackButton();
+  }
+
+  private async setupBackButton() {
+    this.backButtonListener = await App.addListener('backButton', () => {
+      //this.router.navigate(['/home']);
+      document.location.href = 'index.html';
+    });
   }
 
   get currentChannel(): Channel | null {
@@ -219,15 +229,15 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => {
       const container = this.channelList?.nativeElement;
       const activeElement = document.getElementById('channel-' + this.currentChannelIndex);
-      
+
       if (container && activeElement) {
         const containerHeight = container.offsetHeight;
         const elementTop = (activeElement as HTMLElement).offsetTop;
         const elementHeight = activeElement.offsetHeight;
-        
+
         // Elemanı konteynırın tam ortasına getirecek scroll pozisyonunu hesapla
         const scrollTo = elementTop - (containerHeight / 2) + (elementHeight / 2);
-        
+
         container.scrollTo({
           top: scrollTo,
           behavior: 'smooth'
@@ -251,6 +261,9 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy() {
     this.subscription.unsubscribe();
+    if (this.backButtonListener) {
+      this.backButtonListener.remove();
+    }
     if (this.player) {
       this.player.dispose();
       this.player = null;
