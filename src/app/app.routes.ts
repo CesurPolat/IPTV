@@ -5,6 +5,7 @@ import { PlayerComponent } from './pages/player/player.component';
 import { SearchComponent } from './pages/search/search.component';
 import { SeriesComponent } from './pages/series/series.component';
 import { MainLayoutComponent } from './components/layout/main-layout.component';
+import { RadioComponent } from './pages/radio/radio.component';
 
 export const routes: Routes = [
     {
@@ -37,5 +38,9 @@ export const routes: Routes = [
     {
         path: 'player',
         component: PlayerComponent
+    },
+    {
+        path: 'radio',
+        component: RadioComponent
     }
 ];

@@ -1,0 +1,60 @@
+<div class="radio-container">
+  <!-- Sol Bölüm: Plak ve Kontroller -->
+  <div class="vinyl-section">
+    <div class="vinyl-wrapper" [class.playing]="isPlaying" [class.changing]="isChanging">
+      <div class="vinyl-disc-shell">
+        <div class="vinyl-disc">
+          <div class="vinyl-label">
+            <img [src]="currentChannel?.poster || 'assets/default-radio.png'" [alt]="currentChannel?.name" class="channel-image">
+          </div>
+        </div>
+      </div>
+      <div class="vinyl-arm"></div>
+    </div>
+
+    <!-- Hidden audio element for Video.js -->
+    <video #audioPlayer class="video-js" style="display: none;"></video>
+
+    <div class="playback-controls">
+      <button class="control-btn" (click)="previousChannel()" title="Previous Channel">
+        <ng-icon name="matSkipPrevious" class="emoji-icon"></ng-icon>
+      </button>
+      <button class="control-btn play-pause" (click)="togglePlay()" [title]="isPlaying ? 'Pause' : 'Play'">
+        <ng-icon [name]="isPlaying ? 'matPause' : 'matPlayArrow'" class="emoji-icon"></ng-icon>
+      </button>
+      <button class="control-btn" (click)="nextChannel()" title="Next Channel">
+        <ng-icon name="matSkipNext" class="emoji-icon"></ng-icon>
+      </button>
+    </div>
+
+    <div class="now-playing" *ngIf="currentChannel">
+      <h3>{{ currentChannel.name }}</h3>
+      <p>{{ currentChannel.category }}</p>
+    </div>
+  </div>
+
+  <!-- Sağ Bölüm: Kanal Listesi -->
+  <div class="list-section">
+    <div class="section-title">
+      <h2>Radio Channels</h2>
+    </div>
+    <div class="channel-list" #channelList>
+      <div *ngFor="let channel of channels; let i = index" 
+           class="channel-item" 
+           [id]="'channel-' + i"
+           [class.active]="i === currentChannelIndex"
+           (click)="selectChannel(i)">
+        <img [src]="channel.poster || 'assets/default-radio.png'" [alt]="channel.name" class="list-poster">
+        <div class="channel-info">
+          <span class="channel-name">{{ channel.name }}</span>
+          <span class="channel-cat">{{ channel.category }}</span>
+        </div>
+        <div *ngIf="i === currentChannelIndex && isPlaying" class="playing-indicator">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

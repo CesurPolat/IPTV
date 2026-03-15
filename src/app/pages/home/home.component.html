@@ -1,48 +1,49 @@
-<div class="container">
-    <section class="grid-section">
-        <h2 class="section-title">Popüler Kanallar</h2>
-        <div class="channel-grid" #channelGrid>
-            <div class="channel-card" *ngFor="let channel of channels; let i = index" 
-                [routerLink]="['/tv', channel.originalIndex]" #channelCard
-                [class.active]="activeSection === 'channels' && i === channelIndex"
-                tabindex="-1">
-                <div class="image-wrapper">
-                    <img [src]="channel.poster" [alt]="channel.name" loading="lazy">
-                    <div class="overlay">
-                        <div class="play-icon">▶</div>
-                    </div>
+<div class="home-container">
+    <div class="main-grid">
+        <div class="grid-item tv-card" 
+             [routerLink]="channels.length > 0 ? ['/tv', channels[0].originalIndex || 0] : null"
+             [class.active]="activeSection === 'main' && activeIndex === 0"
+             tabindex="0">
+            <div class="card-content">
+                <div class="icon-wrapper">
+                    <ng-icon name="matTv" class="card-icon"></ng-icon>
                 </div>
-                <div class="card-info">
-                    <h3>{{channel.name}}</h3>
-                    <p class="current-show" *ngIf="channel.currentShow">{{channel.currentShow}}</p>
-                    <p class="category" *ngIf="!channel.currentShow">{{channel.category}}</p>
-                </div>
+                <h2>TV</h2>
             </div>
         </div>
-    </section>
 
-    <section class="grid-section" *ngIf="series.length > 0">
-        <h2 class="section-title">Diziler</h2>
-        <div class="channel-grid">
-            <div class="channel-card" *ngFor="let item of series; let i = index" #channelCard
-                [routerLink]="['/player']" [queryParams]="{ url: item.source }"
-                [class.active]="activeSection === 'series' && i === seriesIndex"
-                tabindex="-1">
-                <div class="image-wrapper">
-                    <img [src]="item.poster" [alt]="item.name" loading="lazy">
-                    <div class="overlay">
-                        <div class="play-icon">▶</div>
+        <div class="right-column">
+            <div class="grid-item radio-card"
+                 [routerLink]="['/radio']"
+                 [class.active]="activeSection === 'main' && activeIndex === 1"
+                 tabindex="0">
+                <div class="card-content">
+                    <div class="icon-wrapper">
+                        <ng-icon name="matRadio" class="card-icon"></ng-icon>
                     </div>
+                    <h2>Radio</h2>
                 </div>
-                <div class="card-info">
-                    <h3>{{item.name}}</h3>
-                    <p class="category">{{item.category}}</p>
+            </div>
+
+            <div class="grid-item movies-card"
+                 [routerLink]="['/series']"
+                 [class.active]="activeSection === 'main' && activeIndex === 2"
+                 tabindex="0">
+                <div class="card-content">
+                    <div class="icon-wrapper">
+                        <ng-icon name="matMovie" class="card-icon"></ng-icon>
+                    </div>
+                    <h2>Movies</h2>
                 </div>
             </div>
         </div>
-    </section>
+    </div>
 
     <div class="loading-overlay" *ngIf="isLoading">
         <div class="spinner"></div>
+    </div>
+
+    <div class="version-badge">
+        v{{appVersion}}
     </div>
 </div>

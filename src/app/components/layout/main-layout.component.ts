@@ -9,7 +9,7 @@ import { HeaderComponent } from '../header/header.component';
   imports: [CommonModule, RouterOutlet, HeaderComponent],
   template: `
     <div class="layout-wrapper">
-      <app-header></app-header>
+      <!-- <app-header></app-header> -->
       <main class="content">
         <router-outlet></router-outlet>
       </main>
