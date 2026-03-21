@@ -72,6 +72,53 @@
     .card-icon { font-size: 90px !important; }
 }
 
+.home-container.tv-mode,
+.home-container.compact-mode {
+    padding: clamp(1rem, 1.5vw, 1.5rem);
+
+    .main-grid {
+        width: min(86vw, 1180px);
+        max-width: 1180px;
+        max-height: min(74vh, 680px);
+        gap: clamp(0.75rem, 1vw, 1.05rem);
+    }
+
+    .right-column {
+        gap: clamp(0.75rem, 1vw, 1.05rem);
+    }
+
+    .grid-item {
+        &.active {
+            transform: scale(1.005);
+        }
+
+        .card-content {
+            .icon-wrapper {
+                .card-icon {
+                    font-size: clamp(52px, 4.4vw, 76px);
+                }
+            }
+
+            h2 {
+                font-size: clamp(1.15rem, 1.3vw, 1.5rem);
+                letter-spacing: 1px;
+            }
+        }
+    }
+
+    .tv-card {
+        .card-icon {
+            font-size: clamp(82px, 6.5vw, 118px) !important;
+        }
+    }
+
+    .settings-card {
+        .card-icon {
+            font-size: clamp(44px, 3.3vw, 62px) !important;
+        }
+    }
+}
+
 .loading-overlay {
     position: fixed;
     top: 0;

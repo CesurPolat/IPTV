@@ -1,4 +1,4 @@
-<div class="home-container">
+<div class="home-container" [class.tv-mode]="isTvMode" [class.compact-mode]="isCompactViewport">
     <div class="main-grid">
         <div class="grid-item tv-card" 
              [routerLink]="channels.length > 0 ? ['/tv', channels[0].originalIndex || 0] : null"

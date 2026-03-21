@@ -27,6 +27,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     isLoading = true;
     activeIndex = 0;
     activeSection: 'main' = 'main';
+    isTvMode = false;
+    isCompactViewport = false;
     appVersion = environment.version;
 
     searchQuery = '';
@@ -41,6 +43,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     ) { }
 
     ngOnInit() {
+        this.isTvMode = this.detectTvMode();
+        this.isCompactViewport = this.detectCompactViewport();
 
         console.log('[Home] document location:', document.location.toString());
 
@@ -70,6 +74,28 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:resize')
     onResize() {
+        this.isTvMode = this.detectTvMode();
+        this.isCompactViewport = this.detectCompactViewport();
+    }
+
+    private detectTvMode(): boolean {
+        const ua = navigator.userAgent.toLowerCase();
+        const tvUserAgent = /(smart-tv|smarttv|hbbtv|appletv|googletv|android tv|aftb|aftm|afts|aftt|dtv|netcast|viera|tizen|web0s|webos|bravia)/.test(ua);
+        const largestEdge = Math.max(window.innerWidth, window.innerHeight);
+        const smallestEdge = Math.min(window.innerWidth, window.innerHeight);
+        const isLargeLandscape = largestEdge >= 1280 && smallestEdge >= 720;
+        const isAndroid = ua.includes('android');
+        const hasTouch = (navigator.maxTouchPoints || 0) > 0;
+
+        return tvUserAgent || (isAndroid && isLargeLandscape && !hasTouch);
+    }
+
+    private detectCompactViewport(): boolean {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // Keep desktop at normal zoom unchanged; compact only when effective viewport gets tight.
+        return width <= 1280 || height <= 760;
     }
 
     @HostListener('window:keydown', ['$event'])
