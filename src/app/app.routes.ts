@@ -6,6 +6,7 @@ import { SearchComponent } from './pages/search/search.component';
 import { SeriesComponent } from './pages/series/series.component';
 import { MainLayoutComponent } from './components/layout/main-layout.component';
 import { RadioComponent } from './pages/radio/radio.component';
+import { SettingsComponent } from './pages/settings/settings.component';
 
 export const routes: Routes = [
     {
@@ -28,6 +29,10 @@ export const routes: Routes = [
             {
                 path: 'series',
                 component: SeriesComponent
+            },
+            {
+                path: 'settings',
+                component: SettingsComponent
             }
         ]
     },

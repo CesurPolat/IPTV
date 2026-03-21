@@ -36,6 +36,18 @@
                     <h2>Movies</h2>
                 </div>
             </div>
+
+            <div class="grid-item settings-card"
+                 [routerLink]="['/settings']"
+                 [class.active]="activeSection === 'main' && activeIndex === 3"
+                 tabindex="0">
+                <div class="card-content">
+                    <div class="icon-wrapper">
+                        <ng-icon name="matSettings" class="card-icon"></ng-icon>
+                    </div>
+                    <h2>Settings</h2>
+                </div>
+            </div>
         </div>
     </div>
 

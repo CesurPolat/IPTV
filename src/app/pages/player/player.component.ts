@@ -1,7 +1,6 @@
 import { Component, HostListener, AfterViewInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
-import { App as CapacitorApp } from '@capacitor/app';
 import videojs from 'video.js';
 
 @Component({
@@ -20,7 +19,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   showControls = true;
   private currentUrl = '';
   private controlsTimeout?: any;
-  private backButtonListener: any;
 
   constructor(
     private cdr: ChangeDetectorRef,
@@ -38,13 +36,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     });
     this.resetControlsTimer();
-
-    // Capacitor back button listener
-    this.backButtonListener = CapacitorApp.addListener('backButton', () => {
-      // Backspace tuşuna basılmış gibi davran
-      const event = new KeyboardEvent('keydown', { key: 'Backspace' });
-      this.handleKeyboardEvent(event);
-    });
   }
 
   ngOnDestroy() {
@@ -54,9 +45,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.controlsTimeout) {
       clearTimeout(this.controlsTimeout);
-    }
-    if (this.backButtonListener) {
-      this.backButtonListener.remove();
     }
   }
 

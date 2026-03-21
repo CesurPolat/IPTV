@@ -18,7 +18,7 @@
 
 .right-column {
     display: grid;
-    grid-template-rows: 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
     gap: 1.5rem;
 }
 
@@ -66,6 +66,10 @@
 .tv-card {
     height: 100%;
     .card-icon { font-size: 200px !important; }
+}
+
+.settings-card {
+    .card-icon { font-size: 90px !important; }
 }
 
 .loading-overlay {

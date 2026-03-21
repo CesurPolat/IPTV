@@ -1,7 +1,6 @@
 import { Component, OnInit, OnDestroy, CUSTOM_ELEMENTS_SCHEMA, HostListener, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { App } from '@capacitor/app';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { matPlayArrow, matPause, matSkipNext, matSkipPrevious } from '@ng-icons/material-icons/baseline';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
@@ -93,7 +92,6 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
   isPlaying: boolean = false;
   isChanging: boolean = false;
   private subscription: Subscription = new Subscription();
-  private backButtonListener: any;
 
   constructor(
     private tvChannelsService: TvChannelsService,
@@ -176,14 +174,6 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.channels.length > 0) {
       this.currentChannelIndex = 0;
     }
-    this.setupBackButton();
-  }
-
-  private async setupBackButton() {
-    this.backButtonListener = await App.addListener('backButton', () => {
-      //this.router.navigate(['/home']);
-      document.location.href = 'index.html';
-    });
   }
 
   get currentChannel(): Channel | null {
@@ -261,9 +251,6 @@ export class RadioComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy() {
     this.subscription.unsubscribe();
-    if (this.backButtonListener) {
-      this.backButtonListener.remove();
-    }
     if (this.player) {
       this.player.dispose();
       this.player = null;

@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
-import { matTv, matRadio, matMovie } from '@ng-icons/material-icons/baseline';
+import { matTv, matRadio, matMovie, matSettings } from '@ng-icons/material-icons/baseline';
 import { environment } from '../../../environments/environment';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
 import { NavigationService } from '../../services/navigation.service';
@@ -12,7 +12,7 @@ import { NavigationService } from '../../services/navigation.service';
     selector: 'app-home',
     standalone: true,
     imports: [CommonModule, RouterLink, FormsModule, NgIconComponent],
-    providers: [provideIcons({ matTv, matRadio, matMovie })],
+    providers: [provideIcons({ matTv, matRadio, matMovie, matSettings })],
     templateUrl: './home.component.html',
     styleUrl: './home.component.scss'
 })
@@ -85,18 +85,22 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                 }
                 break;
             case 'ArrowLeft':
-                if (this.activeIndex === 1 || this.activeIndex === 2) {
+                if (this.activeIndex >= 1 && this.activeIndex <= 3) {
                     this.activeIndex = 0;
                 }
                 break;
             case 'ArrowDown':
                 if (this.activeIndex === 1) {
                     this.activeIndex = 2;
+                } else if (this.activeIndex === 2) {
+                    this.activeIndex = 3;
                 }
                 break;
             case 'ArrowUp':
                 if (this.activeIndex === 2) {
                     this.activeIndex = 1;
+                } else if (this.activeIndex === 3) {
+                    this.activeIndex = 2;
                 }
                 break;
             case 'Enter':
@@ -108,6 +112,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                     }
                     if (this.activeIndex === 1) this.router.navigate(['/radio']);
                     if (this.activeIndex === 2) this.router.navigate(['/series']);
+                    if (this.activeIndex === 3) this.router.navigate(['/settings']);
                 });
                 break;
         }

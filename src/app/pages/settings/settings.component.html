@@ -1,0 +1,43 @@
+<div class="settings-container">
+    <div class="settings-card">
+        <h1>Settings</h1>
+
+        <div
+            class="setting-row"
+            [class.active]="selectedSettingIndex === 0"
+            (click)="toggleArchillectSetting()">
+            <div class="setting-text">
+                <h2>Archillect TV</h2>
+                <p>Reklam tespitinde Archillect TV ekranini ac/kapat.</p>
+            </div>
+
+            <label class="switch" aria-label="Archillect TV ayari">
+                <input
+                    type="checkbox"
+                    [checked]="isArchillectTvEnabled"
+                    (click)="$event.stopPropagation()"
+                    (change)="onArchillectToggle($event)">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div
+            class="setting-row"
+            [class.active]="selectedSettingIndex === 1"
+            (click)="toggleAutoSwitchSetting()">
+            <div class="setting-text">
+                <h2>Kanal Seciminde Otomatik Gecis</h2>
+                <p>Kanal listesinde saga/sola gecince Enter beklemeden kanali degistir.</p>
+            </div>
+
+            <label class="switch" aria-label="Kanal seciminde otomatik gecis ayari">
+                <input
+                    type="checkbox"
+                    [checked]="isChannelAutoSwitchEnabled"
+                    (click)="$event.stopPropagation()"
+                    (change)="onAutoSwitchToggle($event)">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+</div>

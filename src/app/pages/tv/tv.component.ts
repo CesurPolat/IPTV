@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
-import { App as CapacitorApp } from '@capacitor/app';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ArchillectTvComponent } from '../../components/archillect-tv/archillect-tv.component';
@@ -38,11 +37,14 @@ export class TvComponent implements OnInit, OnDestroy {
   availableQualities: Quality[] = [];
   currentQuality: string = 'auto';
   selectedQualityIndex: number = 0;
-  isQualitySelectorActive: boolean = false;
   isAdPlaying: boolean = false;
+  isArchillectTvEnabled: boolean = true;
+  isChannelAutoSwitchEnabled: boolean = false;
   showChannelInfo: boolean = false;
+  showPlayerControls: boolean = true;
+  isQualityPanelActive: boolean = false;
+  private controlsHideTimeout: any;
   private infoTimeout: any;
-  private backButtonListener: any;
 
   constructor(
     private tvChannelsService: TvChannelsService,
@@ -51,14 +53,34 @@ export class TvComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
+    this.isArchillectTvEnabled = this.readArchillectSetting();
+    this.isChannelAutoSwitchEnabled = this.readChannelAutoSwitchSetting();
     this.fetchChannels();
 
-    // Capacitor back button listener'ı ekle
-    this.backButtonListener = CapacitorApp.addListener('backButton', () => {
-      // Backspace tuşuna basılmış gibi davran
-      const event = new KeyboardEvent('keydown', { key: 'Backspace' });
-      this.handleKeyboardEvent(event);
-    });
+  }
+
+  private readArchillectSetting(): boolean {
+    try {
+      const stored = localStorage.getItem('archillectTvEnabled');
+      if (stored === null) {
+        return true;
+      }
+      return stored === 'true';
+    } catch {
+      return true;
+    }
+  }
+
+  private readChannelAutoSwitchSetting(): boolean {
+    try {
+      const stored = localStorage.getItem('channelAutoSwitchEnabled');
+      if (stored === null) {
+        return false;
+      }
+      return stored === 'true';
+    } catch {
+      return false;
+    }
   }
 
   fetchChannels() {
@@ -100,6 +122,7 @@ export class TvComponent implements OnInit, OnDestroy {
 
     this.player.on('play', () => {
       this.showPlayIcon = false;
+      this.showControlsTemporarily();
     });
 
     // Oynatılan segment (TS) dosyalarını kontrol et
@@ -137,13 +160,15 @@ export class TvComponent implements OnInit, OnDestroy {
             }
             // --- ATALAMA MANTIĞI BURADA BİTİYOR ---
 
-            if (this.isAdPlaying !== isAd) {
-              this.isAdPlaying = isAd;
-              this.player.muted(isAd);
-              console.log(isAd ? 'REKLAM SESSİZE ALINDI' : 'YAYIN DEVAM EDİYOR');
+            const shouldUseArchillect = this.isArchillectTvEnabled && isAd;
+
+            if (this.isAdPlaying !== shouldUseArchillect) {
+              this.isAdPlaying = shouldUseArchillect;
+              this.player.muted(shouldUseArchillect);
+              console.log(shouldUseArchillect ? 'ARCHILLECT TV AKTIF' : 'ARCHILLECT TV PASIF');
             }
 
-            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd);
+            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd, ' - Archillect aktif mi?:', shouldUseArchillect);
           }
         }
       }
@@ -151,6 +176,8 @@ export class TvComponent implements OnInit, OnDestroy {
 
     this.player.on('pause', () => {
       this.showPlayIcon = true;
+      this.showPlayerControls = true;
+      this.clearControlsHideTimeout();
     });
 
     this.player.play().catch(() => {
@@ -238,8 +265,34 @@ export class TvComponent implements OnInit, OnDestroy {
       });
 
       this.player.play();
+      this.showControlsTemporarily();
       this.triggerChannelInfo();
     }
+  }
+
+  private clearControlsHideTimeout() {
+    if (this.controlsHideTimeout) {
+      clearTimeout(this.controlsHideTimeout);
+      this.controlsHideTimeout = null;
+    }
+  }
+
+  private scheduleControlsAutoHide() {
+    this.clearControlsHideTimeout();
+
+    if (this.isAdPlaying || this.isMenuOpen || this.isQualityPanelActive || !this.player || this.player.paused()) {
+      this.showPlayerControls = true;
+      return;
+    }
+
+    this.controlsHideTimeout = setTimeout(() => {
+      this.showPlayerControls = false;
+    }, 3000);
+  }
+
+  showControlsTemporarily() {
+    this.showPlayerControls = true;
+    this.scheduleControlsAutoHide();
   }
 
   triggerChannelInfo() {
@@ -256,7 +309,7 @@ export class TvComponent implements OnInit, OnDestroy {
     if (this.menuContent) {
       const selectedElement = this.menuContent.nativeElement.querySelector(`li:nth-child(${index + 1})`);
       if (selectedElement) {
-        selectedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        selectedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       }
     }
   }
@@ -265,11 +318,13 @@ export class TvComponent implements OnInit, OnDestroy {
   handleKeyboardEvent(event: KeyboardEvent) {
 
     event.preventDefault();
+    this.showControlsTemporarily();
 
     if (event.key == "Enter") {
       if (this.isMenuOpen && this.selectedIndex != -1) {
         this.changeChannel(this.selectedIndex);
         this.isMenuOpen = false;
+        this.showControlsTemporarily();
       } else if (this.player && !this.isAdPlaying) {
         if (this.player.paused()) {
           this.player.play();
@@ -280,54 +335,71 @@ export class TvComponent implements OnInit, OnDestroy {
     }
 
     if (event.key == "Backspace") {
-      this.isMenuOpen = !this.isMenuOpen;
-      this.isQualitySelectorActive = false;
-      if (this.isMenuOpen) {
-        this.fetchChannels();
-        this.selectedIndex = this.currentChannelIndex;
-        setTimeout(() => this.scrollToSelected(this.currentChannelIndex), 100);
-      }
+      this.router.navigate(['/home']);
+      return;
     }
 
     if (this.isMenuOpen) {
 
-      if (event.key == "ArrowLeft") {
-        if (this.isQualitySelectorActive)
-          this.isQualitySelectorActive = false;
-        else
-          document.location.href = 'index.html';
-        //this.router.navigate(['/home']);
-
-      }
-      else if (event.key == "ArrowRight") {
-        this.isQualitySelectorActive = true;
+      if (event.key === 'ArrowUp') {
+        this.isMenuOpen = false;
+        this.isQualityPanelActive = false;
+        this.scheduleControlsAutoHide();
+        return;
       }
 
-      if (this.isQualitySelectorActive) {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const previousIndex = this.selectedIndex;
+        this.selectedIndex += event.key === 'ArrowLeft' ? -1 : 1;
+        this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.channels.length - 1));
+        this.scrollToSelected(this.selectedIndex);
 
-        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-          this.selectedQualityIndex += event.key === 'ArrowUp' ? -1 : 1;
-          this.selectedQualityIndex = Math.max(0, Math.min(this.selectedQualityIndex, this.availableQualities.length - 1));
-          this.changeQualityById(this.availableQualities[this.selectedQualityIndex].id);
+        if (this.isChannelAutoSwitchEnabled && this.selectedIndex !== previousIndex) {
+          this.changeChannel(this.selectedIndex);
         }
+        return;
+      }
 
-      } else {
-
-        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-          this.selectedIndex += event.key === 'ArrowUp' ? -1 : 1;
-          this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.channels.length - 1));
-          this.scrollToSelected(this.selectedIndex);
-        }
-
+      if (event.key === 'ArrowDown') {
+        return;
       }
 
     } else {
 
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        this.selectedIndex += event.key === 'ArrowUp' ? -1 : 1;
-        this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.channels.length - 1));
-        this.fetchChannels();// If urls are expired, fetch channels again to get new urls
-        this.changeChannel(this.selectedIndex);
+      if (event.key === 'ArrowUp') {
+        this.isQualityPanelActive = !this.isQualityPanelActive;
+        if (this.isQualityPanelActive) {
+          this.showPlayerControls = true;
+          this.clearControlsHideTimeout();
+        } else {
+          this.scheduleControlsAutoHide();
+        }
+        return;
+      }
+
+      if ((event.key === '+' || event.key === '=') || (this.isQualityPanelActive && event.key === 'ArrowRight')) {
+        this.cycleQuality(1);
+        return;
+      }
+
+      if ((event.key === '-' || event.key === '_') || (this.isQualityPanelActive && event.key === 'ArrowLeft')) {
+        this.cycleQuality(-1);
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        this.isMenuOpen = true;
+        this.isQualityPanelActive = false;
+        this.fetchChannels();
+        this.selectedIndex = this.currentChannelIndex;
+        setTimeout(() => this.scrollToSelected(this.currentChannelIndex), 100);
+        this.showPlayerControls = true;
+        this.clearControlsHideTimeout();
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        return;
       }
 
     }
@@ -337,7 +409,42 @@ export class TvComponent implements OnInit, OnDestroy {
   playVideo() {
     if (this.player) {
       this.player.play();
+      this.showControlsTemporarily();
     }
+  }
+
+  togglePlayPause() {
+    if (!this.player || this.isAdPlaying) {
+      return;
+    }
+
+    if (this.player.paused()) {
+      this.player.play();
+      this.showControlsTemporarily();
+      return;
+    }
+
+    this.player.pause();
+    this.showPlayerControls = true;
+    this.clearControlsHideTimeout();
+  }
+
+  cycleQuality(step: number) {
+    if (!this.availableQualities.length) {
+      return;
+    }
+
+    const nextIndex = Math.max(0, Math.min(this.selectedQualityIndex + step, this.availableQualities.length - 1));
+    if (nextIndex === this.selectedQualityIndex) {
+      return;
+    }
+
+    this.changeQualityById(this.availableQualities[nextIndex].id);
+    this.showControlsTemporarily();
+  }
+
+  get isPlayerPaused(): boolean {
+    return !this.player || this.player.paused();
   }
 
   changeQuality(event: Event) {
@@ -368,8 +475,6 @@ export class TvComponent implements OnInit, OnDestroy {
     if (this.player) {
       this.player.dispose();
     }
-    if (this.backButtonListener) {
-      this.backButtonListener.remove();
-    }
+    this.clearControlsHideTimeout();
   }
 }
