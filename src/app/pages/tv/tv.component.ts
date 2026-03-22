@@ -7,9 +7,6 @@ import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ArchillectTvComponent } from '../../components/archillect-tv/archillect-tv.component';
 import { environment } from '../../../environments/environment';
-import { set } from 'video.js/dist/types/tech/middleware';
-
-
 
 interface Quality {
   id: string;
@@ -29,6 +26,7 @@ interface Quality {
 export class TvComponent implements OnInit, OnDestroy {
   @ViewChild('menuContent') menuContent!: ElementRef;
   private readonly seekStepSeconds = 10;
+  private readonly seekCommitDelayMs = 350;
   private readonly liveEdgeThresholdSeconds = 3;
 
   title = 'IPTV';
@@ -48,6 +46,9 @@ export class TvComponent implements OnInit, OnDestroy {
   showPlayerControls: boolean = true;
   isQualityPanelActive: boolean = false;
   playbackProgressPercent: number = 0;
+  pendingSeekProgressPercent: number | null = null;
+  pendingSeekDirection: 'backward' | 'forward' | null = null;
+  pendingSeekDeltaSeconds: number = 0;
   isProgressSeekable: boolean = false;
   isLivePlayback: boolean = true;
   playbackStatusLabel: string = 'Canlı';
@@ -57,6 +58,8 @@ export class TvComponent implements OnInit, OnDestroy {
   private lastSegmentDay: string | null = null;
   private includeAllSegmentsMode: boolean = false;
   private isSwitchingPlaylistMode: boolean = false;
+  private pendingSeekTime: number | null = null;
+  private seekCommitTimeout: any;
   private controlsHideTimeout: any;
   private infoTimeout: any;
 
@@ -273,6 +276,10 @@ export class TvComponent implements OnInit, OnDestroy {
 
   changeChannel(index: number) {
     if (this.player && this.channels[index]) {
+      this.clearPendingSeekCommit();
+      this.pendingSeekTime = null;
+      this.resetPendingSeekFeedback();
+
       const currentUrl = this.player.currentSrc();
       const newName = this.channels[index].name;
       const newUrl = this.channels[index].source;
@@ -498,6 +505,9 @@ export class TvComponent implements OnInit, OnDestroy {
 
     const bounds = this.getSeekBounds();
     const targetTime = bounds.min + (bounds.max - bounds.min) * clickRatio;
+    this.clearPendingSeekCommit();
+    this.pendingSeekTime = null;
+    this.resetPendingSeekFeedback();
     this.player.currentTime(targetTime);
     this.updatePlaybackProgress();
     this.showControlsTemporarily();
@@ -509,20 +519,100 @@ export class TvComponent implements OnInit, OnDestroy {
     }
 
     const currentTime = this.player.currentTime();
-    if (!Number.isFinite(currentTime)) {
+    const baseTime = this.pendingSeekTime ?? currentTime;
+    if (!Number.isFinite(baseTime)) {
       return;
     }
 
     const bounds = this.getSeekBounds();
 
-    const targetTime = Math.max(bounds.min, Math.min(currentTime + deltaSeconds, bounds.max));
-    if (Math.abs(targetTime - currentTime) < 0.1) {
+    const targetTime = Math.max(bounds.min, Math.min(baseTime + deltaSeconds, bounds.max));
+    if (Math.abs(targetTime - baseTime) < 0.1) {
       return;
     }
 
+    this.pendingSeekTime = targetTime;
+    this.updatePendingSeekFeedback(targetTime, currentTime, bounds);
+    this.scheduleSeekCommit();
+    this.showControlsTemporarily();
+  }
+
+  private scheduleSeekCommit(): void {
+    this.clearPendingSeekCommit();
+    this.seekCommitTimeout = setTimeout(() => {
+      this.commitPendingSeek();
+    }, this.seekCommitDelayMs);
+  }
+
+  private commitPendingSeek(): void {
+    if (!this.player || this.pendingSeekTime === null) {
+      return;
+    }
+
+    const targetTime = this.pendingSeekTime;
+    this.pendingSeekTime = null;
+    this.seekCommitTimeout = null;
     this.player.currentTime(targetTime);
     this.updatePlaybackProgress();
-    this.showControlsTemporarily();
+    this.resetPendingSeekFeedback();
+  }
+
+  private clearPendingSeekCommit(): void {
+    if (this.seekCommitTimeout) {
+      clearTimeout(this.seekCommitTimeout);
+      this.seekCommitTimeout = null;
+    }
+  }
+
+  private updatePendingSeekFeedback(targetTime: number, currentTime: number, bounds: { min: number; max: number }): void {
+    const duration = bounds.max - bounds.min;
+    if (duration > 0.1) {
+      this.pendingSeekProgressPercent = ((targetTime - bounds.min) / duration) * 100;
+    } else {
+      this.pendingSeekProgressPercent = this.playbackProgressPercent;
+    }
+
+    this.pendingSeekDirection = targetTime < currentTime ? 'backward' : 'forward';
+    this.pendingSeekDeltaSeconds = Math.max(0, Math.round(Math.abs(targetTime - currentTime)));
+  }
+
+  private resetPendingSeekFeedback(): void {
+    this.pendingSeekProgressPercent = null;
+    this.pendingSeekDirection = null;
+    this.pendingSeekDeltaSeconds = 0;
+  }
+
+  private formatSeekDelta(seconds: number): string {
+    if (seconds < 60) {
+      return `${seconds} sn`;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    if (remainder === 0) {
+      return `${minutes} dk`;
+    }
+
+    return `${minutes} dk ${remainder} sn`;
+  }
+
+  get isSeekPending(): boolean {
+    return this.pendingSeekTime !== null && this.pendingSeekProgressPercent !== null;
+  }
+
+  get displayedPlaybackProgressPercent(): number {
+    return this.pendingSeekProgressPercent ?? this.playbackProgressPercent;
+  }
+
+  get displayedPlaybackStatusLabel(): string {
+    if (!this.isSeekPending) {
+      return this.playbackStatusLabel;
+    }
+
+    const delta = this.formatSeekDelta(this.pendingSeekDeltaSeconds);
+    return this.pendingSeekDirection === 'backward'
+      ? `Geri sariliyor (${delta})`
+      : `Ileri sariliyor (${delta})`;
   }
 
   private getSeekBounds(): { min: number; max: number } {
@@ -602,6 +692,10 @@ export class TvComponent implements OnInit, OnDestroy {
     if (!this.player || this.currentChannelIndex < 0 || this.isSwitchingPlaylistMode) {
       return;
     }
+
+    this.clearPendingSeekCommit();
+    this.pendingSeekTime = null;
+    this.resetPendingSeekFeedback();
 
     const targetIncludeAllSegments = !this.isLivePlayback;
     if (targetIncludeAllSegments === this.includeAllSegmentsMode) {
@@ -836,6 +930,9 @@ export class TvComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.clearPendingSeekCommit();
+    this.pendingSeekTime = null;
+    this.resetPendingSeekFeedback();
     if (this.player) {
       this.player.dispose();
     }

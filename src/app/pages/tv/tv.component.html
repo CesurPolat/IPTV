@@ -14,9 +14,10 @@
         </div>
 
         <div class="player-rail">
-            <span class="rail-label">{{ playbackStatusLabel }}</span>
-            <div class="rail-track" [class.seekable]="isProgressSeekable" (click)="onProgressBarClick($event)">
-                <span class="rail-fill" [style.width.%]="playbackProgressPercent"></span>
+            <span class="rail-label" [class.seeking]="isSeekPending">{{ displayedPlaybackStatusLabel }}</span>
+            <div class="rail-track" [class.seekable]="isProgressSeekable" [class.seek-pending]="isSeekPending" (click)="onProgressBarClick($event)">
+                <span class="rail-fill rail-fill-current" [style.width.%]="playbackProgressPercent"></span>
+                <span class="rail-fill rail-fill-pending" *ngIf="isSeekPending" [style.width.%]="displayedPlaybackProgressPercent"></span>
             </div>
         </div>
 

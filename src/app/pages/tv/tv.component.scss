@@ -301,6 +301,11 @@
     white-space: nowrap;
 }
 
+.rail-label.seeking {
+    opacity: 1;
+    color: #ffd38b;
+}
+
 .rail-track {
     flex: 1;
     height: 5px;
@@ -308,6 +313,7 @@
     background: rgba(255, 255, 255, 0.16);
     overflow: hidden;
     cursor: default;
+    position: relative;
 }
 
 .rail-track.seekable {
@@ -316,11 +322,29 @@
 
 .rail-fill {
     display: block;
-    width: 0;
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, #ff5b5b, #ffffff);
-    transition: width 0.1s linear;
+    width: 0;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.rail-fill-current {
+    background: linear-gradient(90deg, rgba(255, 91, 91, 0.9), rgba(255, 255, 255, 0.88));
+    transition: width 0.12s linear;
+    z-index: 1;
+}
+
+.rail-fill-pending {
+    background: linear-gradient(90deg, rgba(255, 189, 89, 0.92), rgba(255, 226, 166, 0.95));
+    transition: width 0.12s linear;
+    z-index: 2;
+    box-shadow: 0 0 0 1px rgba(255, 238, 203, 0.28) inset;
+}
+
+.rail-track.seek-pending {
+    box-shadow: 0 0 0 1px rgba(255, 205, 132, 0.35) inset;
 }
 
 .control-actions {
