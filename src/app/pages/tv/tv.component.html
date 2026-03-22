@@ -9,14 +9,14 @@
 
     <div class="player-controls" *ngIf="!isAdPlaying" [class.menu-open]="isMenuOpen" [class.hidden]="!showPlayerControls">
         <div class="player-meta">
-            <span class="live-pill"><span class="dot"></span>CANLI</span>
+            <span class="live-pill" *ngIf="isLivePlayback"><span class="dot"></span>CANLI</span>
             <span class="channel-title">{{ channels[currentChannelIndex]?.name || 'Kanal' }}</span>
         </div>
 
         <div class="player-rail">
-            <span class="rail-label">Canli Yayin</span>
-            <div class="rail-track">
-                <span class="rail-fill"></span>
+            <span class="rail-label">{{ playbackStatusLabel }}</span>
+            <div class="rail-track" [class.seekable]="isProgressSeekable" (click)="onProgressBarClick($event)">
+                <span class="rail-fill" [style.width.%]="playbackProgressPercent"></span>
             </div>
         </div>
 

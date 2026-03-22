@@ -6,6 +6,8 @@ import 'video.js/dist/video-js.css';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ArchillectTvComponent } from '../../components/archillect-tv/archillect-tv.component';
+import { environment } from '../../../environments/environment';
+import { set } from 'video.js/dist/types/tech/middleware';
 
 
 
@@ -26,6 +28,8 @@ interface Quality {
 })
 export class TvComponent implements OnInit, OnDestroy {
   @ViewChild('menuContent') menuContent!: ElementRef;
+  private readonly seekStepSeconds = 10;
+  private readonly liveEdgeThresholdSeconds = 3;
 
   title = 'IPTV';
   player: any;
@@ -43,6 +47,16 @@ export class TvComponent implements OnInit, OnDestroy {
   showChannelInfo: boolean = false;
   showPlayerControls: boolean = true;
   isQualityPanelActive: boolean = false;
+  playbackProgressPercent: number = 0;
+  isProgressSeekable: boolean = false;
+  isLivePlayback: boolean = true;
+  playbackStatusLabel: string = 'Canlı';
+  private segmentClockLabel: string | null = null;
+  private lastSegmentHour: number | null = null;
+  private lastSegmentMinute: number | null = null;
+  private lastSegmentDay: string | null = null;
+  private includeAllSegmentsMode: boolean = false;
+  private isSwitchingPlaylistMode: boolean = false;
   private controlsHideTimeout: any;
   private infoTimeout: any;
 
@@ -113,7 +127,7 @@ export class TvComponent implements OnInit, OnDestroy {
       controls: false,
       fluid: true,
       sources: [{
-        src: this.channels[this.currentChannelIndex].source,
+        src: this.buildPlaylistUrl(this.channels[this.currentChannelIndex].name, this.includeAllSegmentsMode),
         type: 'application/x-mpegURL'
       }]
     });
@@ -123,10 +137,13 @@ export class TvComponent implements OnInit, OnDestroy {
     this.player.on('play', () => {
       this.showPlayIcon = false;
       this.showControlsTemporarily();
+      this.updatePlaybackProgress();
     });
 
     // Oynatılan segment (TS) dosyalarını kontrol et
     this.player.on('timeupdate', () => {
+      this.updatePlaybackProgress();
+
       const vhs = (this.player as any).tech(true).vhs;
       const media = vhs?.playlists?.media();
 
@@ -139,6 +156,7 @@ export class TvComponent implements OnInit, OnDestroy {
 
         if (currentSegment && currentSegment.resolvedUri) {
           const uri = currentSegment.resolvedUri;
+          this.updateSegmentClockLabelFromUri(uri);
           const currentChannel = this.channels[this.currentChannelIndex];
 
           if (currentChannel?.adsRegex) {
@@ -168,17 +186,35 @@ export class TvComponent implements OnInit, OnDestroy {
               console.log(shouldUseArchillect ? 'ARCHILLECT TV AKTIF' : 'ARCHILLECT TV PASIF');
             }
 
-            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd, ' - Archillect aktif mi?:', shouldUseArchillect);
+            //console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd, ' - Archillect aktif mi?:', shouldUseArchillect);
           }
         }
       }
     });
 
     this.player.on('pause', () => {
+      this.updatePlaybackProgress();
       this.showPlayIcon = true;
       this.showPlayerControls = true;
       this.clearControlsHideTimeout();
     });
+
+    this.player.on('seeking', () => {
+      this.updatePlaybackProgress();
+    });
+
+    this.player.on('durationchange', () => {
+      this.updatePlaybackProgress();
+    });
+
+    this.player.on('loadeddata', () => {
+      this.updatePlaybackProgress();
+    });
+
+    this.player.on('ended', () => {
+      this.handlePlaybackEnded();
+    });
+
 
     this.player.play().catch(() => {
       this.showPlayIcon = true;
@@ -188,6 +224,7 @@ export class TvComponent implements OnInit, OnDestroy {
 
     // Bit hızlarını logla ve kalite seçeneklerini güncelle
     this.player.on('loadedmetadata', () => {
+
 
       const tech = this.player.tech({ IWillNotUseThisInPlugins: true });
       if (tech && tech.vhs) {
@@ -237,6 +274,7 @@ export class TvComponent implements OnInit, OnDestroy {
   changeChannel(index: number) {
     if (this.player && this.channels[index]) {
       const currentUrl = this.player.currentSrc();
+      const newName = this.channels[index].name;
       const newUrl = this.channels[index].source;
 
       // Eğer seçilen kanal zaten oynatılıyorsa, source'u güncelleme
@@ -245,11 +283,15 @@ export class TvComponent implements OnInit, OnDestroy {
       }
 
       this.currentChannelIndex = index;
+      this.isLivePlayback = true;
+      this.includeAllSegmentsMode = false;
 
       this.player.src({
-        src: newUrl,
+        src: this.buildPlaylistUrl(newName, this.includeAllSegmentsMode),
         type: 'application/x-mpegURL'
       });
+      this.segmentClockLabel = null;
+      this.playbackStatusLabel = 'Canlı';
 
       // Yeni medya yüklendiğinde bit hızını yazdır
       this.player.one('loadedmetadata', () => {
@@ -377,12 +419,12 @@ export class TvComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if ((event.key === '+' || event.key === '=') || (this.isQualityPanelActive && event.key === 'ArrowRight')) {
+      if (event.key === '+' || event.key === '=') {
         this.cycleQuality(1);
         return;
       }
 
-      if ((event.key === '-' || event.key === '_') || (this.isQualityPanelActive && event.key === 'ArrowLeft')) {
+      if (event.key === '-' || event.key === '_') {
         this.cycleQuality(-1);
         return;
       }
@@ -399,6 +441,13 @@ export class TvComponent implements OnInit, OnDestroy {
       }
 
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (this.isQualityPanelActive) {
+          this.cycleQuality(event.key === 'ArrowRight' ? 1 : -1);
+          return;
+        }
+
+        const seekDelta = event.key === 'ArrowLeft' ? -this.seekStepSeconds : this.seekStepSeconds;
+        this.seekPlayback(seekDelta);
         return;
       }
 
@@ -427,6 +476,321 @@ export class TvComponent implements OnInit, OnDestroy {
     this.player.pause();
     this.showPlayerControls = true;
     this.clearControlsHideTimeout();
+  }
+
+  onProgressBarClick(event: MouseEvent) {
+    if (!this.player || this.isAdPlaying || !this.isProgressSeekable) {
+      return;
+    }
+
+    const target = event.currentTarget as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    if (!rect.width) {
+      return;
+    }
+
+    const clickOffset = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+    const clickRatio = clickOffset / rect.width;
+
+    const bounds = this.getSeekBounds();
+    const targetTime = bounds.min + (bounds.max - bounds.min) * clickRatio;
+    this.player.currentTime(targetTime);
+    this.updatePlaybackProgress();
+    this.showControlsTemporarily();
+  }
+
+  private seekPlayback(deltaSeconds: number) {
+    if (!this.player || this.isAdPlaying) {
+      return;
+    }
+
+    const currentTime = this.player.currentTime();
+    if (!Number.isFinite(currentTime)) {
+      return;
+    }
+
+    const bounds = this.getSeekBounds();
+
+    const targetTime = Math.max(bounds.min, Math.min(currentTime + deltaSeconds, bounds.max));
+    if (Math.abs(targetTime - currentTime) < 0.1) {
+      return;
+    }
+
+    this.player.currentTime(targetTime);
+    this.updatePlaybackProgress();
+    this.showControlsTemporarily();
+  }
+
+  private getSeekBounds(): { min: number; max: number } {
+    if (!this.player) {
+      return { min: 0, max: 0 };
+    }
+
+    let minSeekTime = 0;
+    let maxSeekTime = Number.isFinite(this.player.duration()) ? this.player.duration() : 0;
+
+    const seekable = this.player.seekable?.();
+    if (seekable && seekable.length > 0) {
+      minSeekTime = seekable.start(0);
+      maxSeekTime = seekable.end(seekable.length - 1);
+    }
+
+    if (!Number.isFinite(minSeekTime)) {
+      minSeekTime = 0;
+    }
+
+    if (!Number.isFinite(maxSeekTime)) {
+      maxSeekTime = minSeekTime;
+    }
+
+    if (maxSeekTime < minSeekTime) {
+      maxSeekTime = minSeekTime;
+    }
+
+    return { min: minSeekTime, max: maxSeekTime };
+  }
+
+  private updatePlaybackProgress() {
+    if (!this.player) {
+      this.playbackProgressPercent = 0;
+      this.isProgressSeekable = false;
+      this.isLivePlayback = false;
+      this.playbackStatusLabel = 'Canlı';
+      return;
+    }
+
+    const currentTime = this.player.currentTime();
+    if (!Number.isFinite(currentTime)) {
+      this.playbackProgressPercent = 0;
+      this.isProgressSeekable = false;
+      this.isLivePlayback = false;
+      this.playbackStatusLabel = 'Canlı';
+      return;
+    }
+
+    const bounds = this.getSeekBounds();
+    const duration = bounds.max - bounds.min;
+
+    if (duration <= 0.1) {
+      this.playbackProgressPercent = 0;
+      this.isProgressSeekable = false;
+      this.isLivePlayback = false;
+      this.playbackStatusLabel = 'Canlı';
+      return;
+    }
+
+    const clampedCurrentTime = Math.max(bounds.min, Math.min(currentTime, bounds.max));
+    this.playbackProgressPercent = ((clampedCurrentTime - bounds.min) / duration) * 100;
+    this.isProgressSeekable = true;
+    const previousLivePlayback = this.isLivePlayback;
+    this.isLivePlayback = this.isAtLiveEdge(clampedCurrentTime, bounds.max);
+    this.playbackStatusLabel = this.isLivePlayback
+      ? 'Canlı'
+      : (this.segmentClockLabel ?? 'Canlı');
+
+    if (previousLivePlayback !== this.isLivePlayback) {
+      const rewindOffsetFromLive = Math.max(0, bounds.max - clampedCurrentTime);
+      this.syncPlaylistModeWithPlayback(rewindOffsetFromLive);
+    }
+  }
+
+  private syncPlaylistModeWithPlayback(rewindOffsetFromLive: number): void {
+    if (!this.player || this.currentChannelIndex < 0 || this.isSwitchingPlaylistMode) {
+      return;
+    }
+
+    const targetIncludeAllSegments = !this.isLivePlayback;
+    if (targetIncludeAllSegments === this.includeAllSegmentsMode) {
+      return;
+    }
+
+    const channel = this.channels[this.currentChannelIndex];
+    if (!channel) {
+      return;
+    }
+
+    this.isSwitchingPlaylistMode = true;
+    this.includeAllSegmentsMode = targetIncludeAllSegments;
+    const wasPaused = this.player.paused();
+
+    this.player.src({
+      src: this.buildPlaylistUrl(channel.name, this.includeAllSegmentsMode),
+      type: 'application/x-mpegURL'
+    });
+
+
+
+    this.player.one('loadedmetadata', () => {
+      if (targetIncludeAllSegments && Number.isFinite(rewindOffsetFromLive)) {
+        const bounds = this.getSeekBounds();
+        const seekTime = Math.max(bounds.min, Math.min(bounds.max - rewindOffsetFromLive, bounds.max));
+        this.player.currentTime(seekTime);
+      }
+
+      setTimeout(() => {
+        this.player.play();
+      }, 500);
+      if (!wasPaused) {
+        this.player.play().catch(() => {
+          // no-op: autoplay can fail depending on platform policies
+        });
+      }
+
+      this.isSwitchingPlaylistMode = false;
+      this.updatePlaybackProgress();
+    });
+
+    this.player.play();
+
+  }
+
+  private handlePlaybackEnded(): void {
+    if (!this.player || this.currentChannelIndex < 0 || this.isSwitchingPlaylistMode) {
+      return;
+    }
+
+    const channel = this.channels[this.currentChannelIndex];
+    if (!channel) {
+      return;
+    }
+
+    this.isSwitchingPlaylistMode = true;
+
+    const hasClockInfo = this.lastSegmentHour !== null && this.lastSegmentMinute !== null;
+
+    const resumeUrl = this.buildPlaylistUrl(
+      channel.name,
+      this.includeAllSegmentsMode,
+      hasClockInfo ? this.lastSegmentHour! : undefined,
+      hasClockInfo ? this.lastSegmentMinute! : undefined,
+      hasClockInfo ? this.lastSegmentDay : undefined
+    );
+
+    this.player.src({
+      src: resumeUrl,
+      type: 'application/x-mpegURL'
+    });
+
+    this.player.one('error', () => {
+      this.isSwitchingPlaylistMode = false;
+    });
+
+    this.player.one('loadedmetadata', () => {
+      this.player.play().catch(() => {
+        // no-op: autoplay can fail depending on platform policies
+      });
+      this.isSwitchingPlaylistMode = false;
+      this.showControlsTemporarily();
+      this.updatePlaybackProgress();
+    });
+  }
+
+  private buildPlaylistUrl(
+    channelName: string,
+    includeAllSegments: boolean,
+    hour?: number,
+    minute?: number,
+    day?: string | null
+  ): string {
+    let url = `${environment.baseUrl}/HlsRecorder/GetLivePlaylist/${channelName}/index.m3u8?includeAllSegments=${includeAllSegments}`;
+
+    if (Number.isFinite(hour) && Number.isFinite(minute)) {
+      url += `&hour=${hour}&minute=${minute}`;
+    }
+
+    if (day && /^\d{8}$/.test(day)) {
+      url += `&day=${day}`;
+    }
+
+    return url;
+  }
+
+  private updateSegmentClockLabelFromUri(uri: string): void {
+    const fileName = uri.split('/').pop() || '';
+    const decodedFileName = this.safeDecodeURIComponent(fileName);
+    const datedTimeMatch = decodedFileName.match(/_(\d{8})_(\d{2})-(\d{2})-(\d{2})(?:\.ts)?(?:\?|$)/i);
+
+    if (datedTimeMatch) {
+      const [, day, hour, minute] = datedTimeMatch;
+      this.segmentClockLabel = `${hour}:${minute}`;
+
+      const parsedHour = Number.parseInt(hour, 10);
+      const parsedMinute = Number.parseInt(minute, 10);
+      if (Number.isFinite(parsedHour) && Number.isFinite(parsedMinute)) {
+        this.lastSegmentHour = parsedHour;
+        this.lastSegmentMinute = parsedMinute;
+        this.lastSegmentDay = day;
+      }
+      return;
+    }
+
+    const timeMatch = decodedFileName.match(/_(\d{2})-(\d{2})-(\d{2})(?:\.ts)?(?:\?|$)/i);
+
+    if (!timeMatch) {
+      return;
+    }
+
+    const [, hour, minute] = timeMatch;
+    this.segmentClockLabel = `${hour}:${minute}`;
+
+    const parsedHour = Number.parseInt(hour, 10);
+    const parsedMinute = Number.parseInt(minute, 10);
+    if (Number.isFinite(parsedHour) && Number.isFinite(parsedMinute)) {
+      this.lastSegmentHour = parsedHour;
+      this.lastSegmentMinute = parsedMinute;
+      this.lastSegmentDay = this.extractDayFromUri(uri) ?? this.estimateDayForHour(parsedHour);
+    }
+  }
+
+  private extractDayFromUri(uri: string): string | null {
+    const decodedUri = this.safeDecodeURIComponent(uri);
+
+    const dayQueryMatch = decodedUri.match(/[?&]day=(\d{8})(?:&|$)/i);
+    if (dayQueryMatch) {
+      return dayQueryMatch[1];
+    }
+
+    const pathDayMatch = decodedUri.match(/(?:^|[\/_-])(20\d{6})(?:[\/_-]|$)/);
+    if (pathDayMatch) {
+      return pathDayMatch[1];
+    }
+
+    return null;
+  }
+
+  private estimateDayForHour(segmentHour: number): string {
+    const now = new Date();
+    const segmentDate = new Date(now);
+
+    // If local time just passed midnight and segment hour is late-night, prefer previous day.
+    if (now.getHours() <= 3 && segmentHour >= 21) {
+      segmentDate.setDate(segmentDate.getDate() - 1);
+    }
+
+    return this.formatDateAsYyyyMmDd(segmentDate);
+  }
+
+  private formatDateAsYyyyMmDd(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
+  }
+
+  private safeDecodeURIComponent(value: string): string {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  private isAtLiveEdge(currentTime: number, maxSeekTime: number): boolean {
+    return (maxSeekTime - currentTime) <= this.liveEdgeThresholdSeconds;
   }
 
   cycleQuality(step: number) {
