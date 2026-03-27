@@ -9,6 +9,7 @@ export interface Channel {
   name: string;
   poster: string;
   source: string;
+  recordingSource?: string;
   category: string;
   
   channelId?: string;

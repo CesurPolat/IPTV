@@ -1,0 +1,383 @@
+.radio-container {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  padding: 15px;
+  gap: 15px;
+  background: radial-gradient(circle at center, #1a1a1a, #000000);
+  color: white;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+
+  .vinyl-section {
+    flex: 1.5;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 20px;
+    padding: 15px;
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.8);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .vinyl-wrapper {
+      position: relative;
+      width: clamp(150px, 40vh, 400px);
+      aspect-ratio: 1 / 1;
+      height: auto;
+      margin-bottom: 15px;
+      perspective: 1000px;
+
+      .vinyl-disc-shell {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.5s ease, opacity 0.5s ease;
+        will-change: transform, opacity;
+      }
+
+      .vinyl-disc {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: #121212;
+        background-image: 
+          repeating-radial-gradient(circle, transparent 0% 1px, #1a1a1a 2px, transparent 3px),
+          radial-gradient(circle, transparent 20%, #121212 21%),
+          radial-gradient(circle, #333 0%, transparent 2%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.1);
+        animation: spin 10s linear infinite;
+        animation-play-state: paused;
+        will-change: transform;
+
+        .vinyl-label {
+          width: 30%;
+          aspect-ratio: 1 / 1;
+          height: auto;
+          border-radius: 50%;
+          overflow: hidden;
+          background: #333;
+          border: 4px solid #000;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          .channel-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: transparent;
+          }
+        }
+      }
+
+    .vinyl-arm {
+        position: absolute;
+        top: 10%;
+        right: 10%;
+        width: 35%;
+        height: 8px;
+        background: linear-gradient(to bottom, #888, #444);
+        border-radius: 5px;
+        transform-origin: 95% 50%;
+        transform: rotate(-120deg); /* Boştayken dışarıda */
+        z-index: 10;
+        transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 2px 5px 10px rgba(0,0,0,0.5);
+
+        &::after {
+          /* İğne ucu (headshell) */
+          content: '';
+          position: absolute;
+          left: -15%;
+          top: -100%;
+          width: 30%;
+          height: 300%;
+          background: #222;
+          border-radius: 5px;
+          transform: rotate(20deg);
+        }
+
+        &::before {
+          /* Kol menteşesi (pivot) */
+          content: '';
+          position: absolute;
+          right: -15px;
+          top: -15px;
+          width: 40px;
+          height: 40px;
+          background: radial-gradient(circle, #666, #222);
+          border-radius: 50%;
+          border: 2px solid #444;
+        }
+      }
+
+      &.playing {
+        .vinyl-disc {
+          animation-play-state: running;
+        }
+
+        .vinyl-arm {
+          transform: rotate(-30deg); /* Plağın üzerine tam oturacak açı */
+        }
+      }
+
+      &.changing {
+        .vinyl-disc-shell {
+          transform: translateX(-120%) scale(0.9);
+          opacity: 0;
+        }
+      }
+    }
+
+    .playback-controls {
+      display: flex;
+      gap: 30px;
+      margin-top: 20px;
+
+      .control-btn {
+        background: none;
+        border: none;
+        color: white;
+        cursor: pointer;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+        padding: 15px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: scale(1.1);
+        }
+
+        &:active {
+          transform: scale(0.95);
+        }
+
+        &.play-pause {
+          background: #e74c3c;
+          padding: 20px;
+
+          &:hover {
+            background: #f1c40f;
+          }
+        }
+
+        .emoji-icon {
+          font-size: 32px;
+          line-height: normal;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+      }
+    }
+
+    .now-playing {
+      text-align: center;
+      margin-top: 30px;
+
+      h3 {
+        margin: 0;
+        font-size: 24px;
+        color: #f1c40f;
+      }
+
+      p {
+        margin: 5px 0 0;
+        color: #bdc3c7;
+        font-size: 16px;
+      }
+    }
+  }
+
+  .list-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 20px;
+    padding: 20px;
+    height: 100%;
+
+    .section-title {
+      padding: 0 0 20px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+      h2 {
+        margin: 0;
+        font-size: 20px;
+        color: #bdc3c7;
+      }
+    }
+
+    .channel-list {
+      flex: 1;
+      overflow-y: auto;
+      margin-top: 20px;
+      padding-right: 10px;
+
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+      &::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+      }
+
+      .channel-item {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        cursor: pointer;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+        transition: all 0.3s;
+        background: rgba(255, 255, 255, 0.05);
+        gap: 15px;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.1);
+          transform: translateX(10px);
+        }
+
+        &.active {
+          background: rgba(231, 76, 60, 0.2);
+          border-left: 4px solid #e74c3c;
+
+          .channel-name {
+            color: #e74c3c;
+            font-weight: bold;
+          }
+        }
+
+        .list-poster {
+          width: 50px;
+          height: 50px;
+          border-radius: 8px;
+          object-fit: contain;
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .channel-info {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+
+          .channel-name {
+            font-size: 16px;
+            margin-bottom: 4px;
+          }
+
+          .channel-cat {
+            font-size: 12px;
+            color: #7f8c8d;
+          }
+        }
+
+        .playing-indicator {
+          display: flex;
+          align-items: flex-end;
+          gap: 3px;
+          height: 20px;
+
+          .bar {
+            width: 4px;
+            background: #e74c3c;
+            animation: bounce 0.5s ease-in-out infinite alternate;
+
+            &:nth-child(2) { animation-delay: 0.1s; }
+            &:nth-child(3) { animation-delay: 0.2s; }
+          }
+        }
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+  from { height: 5px; }
+  to { height: 20px; }
+}
+
+@media (max-width: 900px) {
+  .radio-container {
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    padding: 10px;
+    gap: 10px;
+    
+    .vinyl-section {
+      width: 100%;
+      flex: 0 0 auto;
+      padding: 10px;
+      
+      .vinyl-wrapper {
+        width: clamp(120px, 45vw, 250px);
+        margin-bottom: 10px;
+      }
+
+      .playback-controls {
+        gap: 15px;
+        margin-top: 10px;
+
+        .control-btn {
+          padding: 8px;
+          .emoji-icon { font-size: 24px; }
+          &.play-pause { padding: 12px; }
+        }
+      }
+
+      .now-playing {
+        margin-top: 10px;
+        h3 { font-size: 18px; }
+        p { font-size: 14px; }
+      }
+    }
+    
+    .list-section {
+      width: 100%;
+      flex: 1;
+      height: 0; // Allow flex to take over
+      padding: 10px;
+    }
+  }
+}

@@ -2,13 +2,17 @@ import { Component, OnInit, HostListener, ViewChild, ElementRef, OnDestroy, Afte
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { NgIconComponent, provideIcons } from '@ng-icons/core';
+import { matTv, matRadio, matMovie, matSettings } from '@ng-icons/material-icons/baseline';
+import { environment } from '../../../environments/environment';
 import { Channel, TvChannelsService } from '../../services/tv-channels.service';
 import { NavigationService } from '../../services/navigation.service';
 
 @Component({
     selector: 'app-home',
     standalone: true,
-    imports: [CommonModule, RouterLink, FormsModule],
+    imports: [CommonModule, RouterLink, FormsModule, NgIconComponent],
+    providers: [provideIcons({ matTv, matRadio, matMovie, matSettings })],
     templateUrl: './home.component.html',
     styleUrl: './home.component.scss'
 })
@@ -22,9 +26,10 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     series: Channel[] = [];
     isLoading = true;
     activeIndex = 0;
-    channelIndex = 0;
-    seriesIndex = 0;
-    activeSection: 'channels' | 'series' = 'channels';
+    activeSection: 'main' = 'main';
+    isTvMode = false;
+    isCompactViewport = false;
+    appVersion = environment.version;
 
     searchQuery = '';
     isListening = false;
@@ -38,6 +43,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
     ) { }
 
     ngOnInit() {
+        this.isTvMode = this.detectTvMode();
+        this.isCompactViewport = this.detectCompactViewport();
 
         console.log('[Home] document location:', document.location.toString());
 
@@ -67,97 +74,77 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
     @HostListener('window:resize')
     onResize() {
+        this.isTvMode = this.detectTvMode();
+        this.isCompactViewport = this.detectCompactViewport();
+    }
+
+    private detectTvMode(): boolean {
+        const ua = navigator.userAgent.toLowerCase();
+        const tvUserAgent = /(smart-tv|smarttv|hbbtv|appletv|googletv|android tv|aftb|aftm|afts|aftt|dtv|netcast|viera|tizen|web0s|webos|bravia)/.test(ua);
+        const largestEdge = Math.max(window.innerWidth, window.innerHeight);
+        const smallestEdge = Math.min(window.innerWidth, window.innerHeight);
+        const isLargeLandscape = largestEdge >= 1280 && smallestEdge >= 720;
+        const isAndroid = ua.includes('android');
+        const hasTouch = (navigator.maxTouchPoints || 0) > 0;
+
+        return tvUserAgent || (isAndroid && isLargeLandscape && !hasTouch);
+    }
+
+    private detectCompactViewport(): boolean {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // Keep desktop at normal zoom unchanged; compact only when effective viewport gets tight.
+        return width <= 1280 || height <= 760;
     }
 
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent) {
-        // Eğer input odaklıysa ve Escape değilse özel navigasyonu pas geç
-        if (document.activeElement?.tagName === 'INPUT' && event.key !== 'Escape' && event.key !== 'Enter') {
-            return;
-        }
-
-        const currentData = this.activeSection === 'channels' ? this.channels : this.series;
-        if (currentData.length === 0 && this.activeSection !== 'channels') return;
-
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) {
             event.preventDefault();
-        }
-
-        if (event.key === 'Escape') {
-            (document.activeElement as HTMLElement)?.blur();
-            return;
         }
 
         switch (event.key) {
             case 'ArrowRight':
-                if (this.activeSection === 'channels') {
-                    if (this.channelIndex < this.channels.length - 1) {
-                        this.channelIndex++;
-                        this.activeIndex = this.channelIndex;
-                    }
-                } else {
-                    if (this.seriesIndex < this.series.length - 1) {
-                        this.seriesIndex++;
-                        this.activeIndex = this.seriesIndex;
-                    }
+                if (this.activeIndex === 0) {
+                    this.activeIndex = 1;
                 }
                 break;
             case 'ArrowLeft':
-                if (this.activeSection === 'channels') {
-                    if (this.channelIndex > 0) {
-                        this.channelIndex--;
-                        this.activeIndex = this.channelIndex;
-                    }
-                } else {
-                    if (this.seriesIndex > 0) {
-                        this.seriesIndex--;
-                        this.activeIndex = this.seriesIndex;
-                    }
-                }
-                break;
-            case 'ArrowUp':
-                if (this.activeSection === 'channels') {
-                    this.navService.setSearchSelected(true);
-                    this.router.navigate(['/search']);
-                } else if (this.activeSection === 'series') {
-                    this.activeSection = 'channels';
-                    this.activeIndex = this.channelIndex;
+                if (this.activeIndex >= 1 && this.activeIndex <= 3) {
+                    this.activeIndex = 0;
                 }
                 break;
             case 'ArrowDown':
-                if (this.activeSection === 'channels' && this.series.length > 0) {
-                    this.activeSection = 'series';
-                    this.activeIndex = this.seriesIndex;
+                if (this.activeIndex === 1) {
+                    this.activeIndex = 2;
+                } else if (this.activeIndex === 2) {
+                    this.activeIndex = 3;
+                }
+                break;
+            case 'ArrowUp':
+                if (this.activeIndex === 2) {
+                    this.activeIndex = 1;
+                } else if (this.activeIndex === 3) {
+                    this.activeIndex = 2;
                 }
                 break;
             case 'Enter':
-                if (this.activeSection === 'channels') {
-                    const channel = this.channels[this.channelIndex];
-                    this.router.navigate(['/tv', channel.originalIndex]);
-                } else if (this.activeSection === 'series') {
-                    const seriesItem = this.series[this.seriesIndex];
-                    // Diziler için yeni hazırladığımız player'a yönlendiriyoruz
-                    this.router.navigate(['/player'], { queryParams: { url: seriesItem.source } });
-                }
+                this.ngZone.run(() => {
+                    if (this.activeIndex === 0) {
+                        if (this.channels && this.channels.length > 0) {
+                            this.router.navigate(['/tv', this.channels[0].originalIndex || 0]);
+                        }
+                    }
+                    if (this.activeIndex === 1) this.router.navigate(['/radio']);
+                    if (this.activeIndex === 2) this.router.navigate(['/series']);
+                    if (this.activeIndex === 3) this.router.navigate(['/settings']);
+                });
                 break;
         }
-        this.scrollToActive();
     }
 
     scrollToActive() {
-        setTimeout(() => {
-            const cards = this.channelCards.toArray();
-            const indexOffset = this.activeSection === 'series' ? this.channels.length : 0;
-            const targetCard = cards[this.activeIndex + indexOffset];
-
-            if (targetCard) {
-                targetCard.nativeElement.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center',
-                    inline: 'center'
-                });
-            }
-        });
     }
 
     filterResults() {
@@ -168,9 +155,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
             this.channels = [...this.allChannels];
             this.series = [...this.allSeries];
             this.activeIndex = 0;
-            this.channelIndex = 0;
+            /* this.channelIndex = 0;
             this.seriesIndex = 0;
-            this.activeSection = 'channels';
+            this.activeSection = 'channels'; */
             this.scrollToActive();
             return;
         }
@@ -198,9 +185,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
                             }
                         });
                         this.activeIndex = 0;
-                        this.channelIndex = 0;
+                        /* this.channelIndex = 0;
                         this.seriesIndex = 0;
-                        this.activeSection = this.channels.length > 0 ? 'channels' : 'series';
+                        this.activeSection = this.channels.length > 0 ? 'channels' : 'series'; */
                         this.scrollToActive();
                     });
                 }
@@ -208,9 +195,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
         }, 500);
 
         this.activeIndex = 0;
-        this.channelIndex = 0;
+        /* this.channelIndex = 0;
         this.seriesIndex = 0;
-        this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels');
+        this.activeSection = this.channels.length > 0 ? 'channels' : (this.series.length > 0 ? 'series' : 'channels'); */
         this.scrollToActive();
     }
 
