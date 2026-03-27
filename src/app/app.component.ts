@@ -5,6 +5,7 @@ import { Updater } from 'capacitor-web-updater';
 import { environment } from '../environments/environment';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Router } from '@angular/router';
+import { NodeJS } from 'capacitor-nodejs';
 
 @Component({
   selector: 'app-root',
@@ -38,6 +39,14 @@ export class AppComponent {
       }
     }).catch((error) => {
       console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
+    });
+
+    console.log('Node.js ortamı hazırlanıyor...');
+    NodeJS.whenReady().then(() => {
+      console.log('Node.js ortamı hazır!');
+      // Node.js ile ilgili işlemler burada yapılabilir
+    }).catch((error) => {
+      console.error('Node.js ortamı hazırlanırken hata oluştu:', error);
     });
 
   }
