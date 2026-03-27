@@ -26,6 +26,11 @@ interface Quality {
 export class TvComponent implements OnInit, OnDestroy {
   @ViewChild('menuContent') menuContent!: ElementRef;
   private readonly seekStepSeconds = 10;
+  private readonly seekHoldResetThresholdMs = 250;
+  private readonly seekBaseRatePerSecond = 12;
+  private readonly seekLinearRateFactor = 18;
+  private readonly seekQuadraticRateFactor = 9;
+  private readonly seekMaxRatePerSecond = 5400;
   private readonly seekCommitDelayMs = 350;
   private readonly liveEdgeThresholdSeconds = 3;
   private readonly onlyLiveStorageKey = 'onlyLiveEnabled';
@@ -62,6 +67,9 @@ export class TvComponent implements OnInit, OnDestroy {
   private isSwitchingPlaylistMode: boolean = false;
   private pendingSeekTime: number | null = null;
   private seekCommitTimeout: any;
+  private seekHoldDirection: 'backward' | 'forward' | null = null;
+  private seekHoldStartedAt: number = 0;
+  private lastSeekInputAt: number = 0;
   private controlsHideTimeout: any;
   private infoTimeout: any;
 
@@ -470,13 +478,22 @@ export class TvComponent implements OnInit, OnDestroy {
           return;
         }
 
-        const seekDelta = event.key === 'ArrowLeft' ? -this.seekStepSeconds : this.seekStepSeconds;
+        const direction = event.key === 'ArrowLeft' ? 'backward' : 'forward';
+        const seekStep = this.getSeekStepForHold(direction, event.repeat);
+        const seekDelta = direction === 'backward' ? -seekStep : seekStep;
         this.seekPlayback(seekDelta);
         return;
       }
 
     }
 
+  }
+
+  @HostListener('document:keyup', ['$event'])
+  handleKeyboardUpEvent(event: KeyboardEvent) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      this.resetSeekHoldState();
+    }
   }
 
   playVideo() {
@@ -552,6 +569,46 @@ export class TvComponent implements OnInit, OnDestroy {
     this.updatePendingSeekFeedback(targetTime, currentTime, bounds);
     this.scheduleSeekCommit();
     this.showControlsTemporarily();
+  }
+
+  private getSeekStepForHold(direction: 'backward' | 'forward', isRepeat: boolean): number {
+    const now = Date.now();
+    const shouldResetHold =
+      !isRepeat ||
+      this.seekHoldDirection !== direction ||
+      this.lastSeekInputAt === 0 ||
+      (now - this.lastSeekInputAt) > this.seekHoldResetThresholdMs;
+
+    if (shouldResetHold) {
+      this.seekHoldDirection = direction;
+      this.seekHoldStartedAt = now;
+      this.lastSeekInputAt = now;
+      return this.seekStepSeconds;
+    }
+
+    const holdDurationMs = now - this.seekHoldStartedAt;
+    const elapsedSinceLastInputMs = Math.max(16, now - this.lastSeekInputAt);
+    this.lastSeekInputAt = now;
+
+    // Use a continuous hold-time formula so long holds can jump back/forward by hours.
+    const seekRatePerSecond = this.getSeekRatePerSecond(holdDurationMs);
+    const acceleratedStep = Math.round((seekRatePerSecond * elapsedSinceLastInputMs) / 1000);
+    return Math.max(1, acceleratedStep);
+  }
+
+  private getSeekRatePerSecond(holdDurationMs: number): number {
+    const holdSeconds = holdDurationMs / 1000;
+    const rate = this.seekBaseRatePerSecond
+      + (this.seekLinearRateFactor * holdSeconds)
+      + (this.seekQuadraticRateFactor * holdSeconds * holdSeconds);
+
+    return Math.max(this.seekBaseRatePerSecond, Math.min(this.seekMaxRatePerSecond, rate));
+  }
+
+  private resetSeekHoldState(): void {
+    this.seekHoldDirection = null;
+    this.seekHoldStartedAt = 0;
+    this.lastSeekInputAt = 0;
   }
 
   private scheduleSeekCommit(): void {
@@ -954,6 +1011,7 @@ export class TvComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.clearPendingSeekCommit();
     this.pendingSeekTime = null;
+    this.resetSeekHoldState();
     this.resetPendingSeekFeedback();
     if (this.player) {
       this.player.dispose();
