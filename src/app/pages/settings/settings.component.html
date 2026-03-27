@@ -5,16 +5,37 @@
         <div
             class="setting-row"
             [class.active]="selectedSettingIndex === 0"
+            (click)="toggleOnlyLiveSetting()">
+            <div class="setting-text">
+                <h2>Only Live</h2>
+                <p>Acikken TV yayinini kanal source linkinden canli olarak oynatir.</p>
+            </div>
+
+            <label class="switch" aria-label="Only Live ayari">
+                <input
+                    type="checkbox"
+                    [checked]="isOnlyLiveEnabled"
+                    (click)="$event.stopPropagation()"
+                    (change)="onOnlyLiveToggle($event)">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div
+            class="setting-row"
+            [class.active]="selectedSettingIndex === 1 && isOnlyLiveEnabled"
+            [class.disabled]="!isOnlyLiveEnabled"
             (click)="toggleArchillectSetting()">
             <div class="setting-text">
                 <h2>Archillect TV</h2>
-                <p>Reklam tespitinde Archillect TV ekranini ac/kapat.</p>
+                <p>Only Live acikken aktif olur, kapaliyken otomatik kapanir.</p>
             </div>
 
             <label class="switch" aria-label="Archillect TV ayari">
                 <input
                     type="checkbox"
                     [checked]="isArchillectTvEnabled"
+                    [disabled]="!isOnlyLiveEnabled"
                     (click)="$event.stopPropagation()"
                     (change)="onArchillectToggle($event)">
                 <span class="slider"></span>
@@ -23,7 +44,7 @@
 
         <div
             class="setting-row"
-            [class.active]="selectedSettingIndex === 1"
+            [class.active]="selectedSettingIndex === 2"
             (click)="toggleAutoSwitchSetting()">
             <div class="setting-text">
                 <h2>Kanal Seciminde Otomatik Gecis</h2>

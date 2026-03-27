@@ -28,6 +28,7 @@ export class TvComponent implements OnInit, OnDestroy {
   private readonly seekStepSeconds = 10;
   private readonly seekCommitDelayMs = 350;
   private readonly liveEdgeThresholdSeconds = 3;
+  private readonly onlyLiveStorageKey = 'onlyLiveEnabled';
 
   title = 'IPTV';
   player: any;
@@ -42,6 +43,7 @@ export class TvComponent implements OnInit, OnDestroy {
   isAdPlaying: boolean = false;
   isArchillectTvEnabled: boolean = true;
   isChannelAutoSwitchEnabled: boolean = false;
+  isOnlyLiveEnabled: boolean = true;
   showChannelInfo: boolean = false;
   showPlayerControls: boolean = true;
   isQualityPanelActive: boolean = false;
@@ -70,10 +72,26 @@ export class TvComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
+    this.isOnlyLiveEnabled = this.readOnlyLiveSetting();
     this.isArchillectTvEnabled = this.readArchillectSetting();
     this.isChannelAutoSwitchEnabled = this.readChannelAutoSwitchSetting();
+
+    this.isArchillectTvEnabled = this.isOnlyLiveEnabled;
+
     this.fetchChannels();
 
+  }
+
+  private readOnlyLiveSetting(): boolean {
+    try {
+      const stored = localStorage.getItem(this.onlyLiveStorageKey);
+      if (stored === null) {
+        return true;
+      }
+      return stored === 'true';
+    } catch {
+      return true;
+    }
   }
 
   private readArchillectSetting(): boolean {
@@ -130,7 +148,7 @@ export class TvComponent implements OnInit, OnDestroy {
       controls: false,
       fluid: true,
       sources: [{
-        src: this.buildPlaylistUrl(this.channels[this.currentChannelIndex].name, this.includeAllSegmentsMode),
+        src: this.resolveChannelPlaybackUrl(this.channels[this.currentChannelIndex], this.includeAllSegmentsMode),
         type: 'application/x-mpegURL'
       }]
     });
@@ -181,7 +199,7 @@ export class TvComponent implements OnInit, OnDestroy {
             }
             // --- ATALAMA MANTIĞI BURADA BİTİYOR ---
 
-            const shouldUseArchillect = this.isArchillectTvEnabled && isAd;
+            const shouldUseArchillect = this.isOnlyLiveEnabled && this.isArchillectTvEnabled && isAd;
 
             if (this.isAdPlaying !== shouldUseArchillect) {
               this.isAdPlaying = shouldUseArchillect;
@@ -281,8 +299,7 @@ export class TvComponent implements OnInit, OnDestroy {
       this.resetPendingSeekFeedback();
 
       const currentUrl = this.player.currentSrc();
-      const newName = this.channels[index].name;
-      const newUrl = this.channels[index].source;
+      const newUrl = this.resolveChannelPlaybackUrl(this.channels[index], false);
 
       // Eğer seçilen kanal zaten oynatılıyorsa, source'u güncelleme
       if (currentUrl === newUrl) {
@@ -294,7 +311,7 @@ export class TvComponent implements OnInit, OnDestroy {
       this.includeAllSegmentsMode = false;
 
       this.player.src({
-        src: this.buildPlaylistUrl(newName, this.includeAllSegmentsMode),
+        src: this.resolveChannelPlaybackUrl(this.channels[index], this.includeAllSegmentsMode),
         type: 'application/x-mpegURL'
       });
       this.segmentClockLabel = null;
@@ -689,7 +706,7 @@ export class TvComponent implements OnInit, OnDestroy {
   }
 
   private syncPlaylistModeWithPlayback(rewindOffsetFromLive: number): void {
-    if (!this.player || this.currentChannelIndex < 0 || this.isSwitchingPlaylistMode) {
+    if (!this.player || this.currentChannelIndex < 0 || this.isSwitchingPlaylistMode || this.isOnlyLiveEnabled) {
       return;
     }
 
@@ -712,7 +729,7 @@ export class TvComponent implements OnInit, OnDestroy {
     const wasPaused = this.player.paused();
 
     this.player.src({
-      src: this.buildPlaylistUrl(channel.name, this.includeAllSegmentsMode),
+      src: this.resolveChannelPlaybackUrl(channel, this.includeAllSegmentsMode),
       type: 'application/x-mpegURL'
     });
 
@@ -756,8 +773,8 @@ export class TvComponent implements OnInit, OnDestroy {
 
     const hasClockInfo = this.lastSegmentHour !== null && this.lastSegmentMinute !== null;
 
-    const resumeUrl = this.buildPlaylistUrl(
-      channel.name,
+    const resumeUrl = this.resolveChannelPlaybackUrl(
+      channel,
       this.includeAllSegmentsMode,
       hasClockInfo ? this.lastSegmentHour! : undefined,
       hasClockInfo ? this.lastSegmentMinute! : undefined,
@@ -783,13 +800,18 @@ export class TvComponent implements OnInit, OnDestroy {
     });
   }
 
-  private buildPlaylistUrl(
-    channelName: string,
+  private resolveChannelPlaybackUrl(
+    channel: Channel,
     includeAllSegments: boolean,
     hour?: number,
     minute?: number,
     day?: string | null
   ): string {
+    if (this.isOnlyLiveEnabled && channel.source) {
+      return channel.source;
+    }
+
+    const channelName = channel.name;
     let url = `${environment.baseUrl}/HlsRecorder/GetLivePlaylist/${channelName}/index.m3u8?includeAllSegments=${includeAllSegments}`;
 
     if (Number.isFinite(hour) && Number.isFinite(minute)) {

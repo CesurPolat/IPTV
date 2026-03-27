@@ -12,24 +12,47 @@ import { Router } from '@angular/router';
 export class SettingsComponent {
     private readonly archillectStorageKey = 'archillectTvEnabled';
     private readonly autoSwitchStorageKey = 'channelAutoSwitchEnabled';
+    private readonly onlyLiveStorageKey = 'onlyLiveEnabled';
     isArchillectTvEnabled = true;
     isChannelAutoSwitchEnabled = false;
+    isOnlyLiveEnabled = true;
     selectedSettingIndex = 0;
 
     constructor(private router: Router) {}
 
     ngOnInit(): void {
+        this.isOnlyLiveEnabled = this.readOnlyLiveSetting();
         this.isArchillectTvEnabled = this.readArchillectSetting();
         this.isChannelAutoSwitchEnabled = this.readAutoSwitchSetting();
+        this.applyOnlyLiveDependencies();
+    }
+
+    onOnlyLiveToggle(event: Event): void {
+        const target = event.target as HTMLInputElement;
+        this.isOnlyLiveEnabled = target.checked;
+        this.persistOnlyLiveSetting(this.isOnlyLiveEnabled);
+        this.applyOnlyLiveDependencies();
+    }
+
+    toggleOnlyLiveSetting(): void {
+        this.isOnlyLiveEnabled = !this.isOnlyLiveEnabled;
+        this.persistOnlyLiveSetting(this.isOnlyLiveEnabled);
+        this.applyOnlyLiveDependencies();
     }
 
     onArchillectToggle(event: Event): void {
+        if (!this.isOnlyLiveEnabled) {
+            return;
+        }
         const target = event.target as HTMLInputElement;
         this.isArchillectTvEnabled = target.checked;
         this.persistArchillectSetting(this.isArchillectTvEnabled);
     }
 
     toggleArchillectSetting(): void {
+        if (!this.isOnlyLiveEnabled) {
+            return;
+        }
         this.isArchillectTvEnabled = !this.isArchillectTvEnabled;
         this.persistArchillectSetting(this.isArchillectTvEnabled);
     }
@@ -57,13 +80,15 @@ export class SettingsComponent {
                 break;
             case 'ArrowRight':
             case 'ArrowDown':
-                this.selectedSettingIndex = Math.min(1, this.selectedSettingIndex + 1);
+                this.selectedSettingIndex = Math.min(2, this.selectedSettingIndex + 1);
                 break;
             case 'Enter':
             case ' ':
                 if (this.selectedSettingIndex === 0) {
-                    this.toggleArchillectSetting();
+                    this.toggleOnlyLiveSetting();
                 } else if (this.selectedSettingIndex === 1) {
+                    this.toggleArchillectSetting();
+                } else if (this.selectedSettingIndex === 2) {
                     this.toggleAutoSwitchSetting();
                 }
                 break;
@@ -71,6 +96,37 @@ export class SettingsComponent {
                 this.router.navigate(['/home']);
                 break;
         }
+    }
+
+    private readOnlyLiveSetting(): boolean {
+        try {
+            const stored = localStorage.getItem(this.onlyLiveStorageKey);
+            if (stored === null) {
+                return true;
+            }
+            return stored === 'true';
+        } catch {
+            return true;
+        }
+    }
+
+    private persistOnlyLiveSetting(enabled: boolean): void {
+        try {
+            localStorage.setItem(this.onlyLiveStorageKey, String(enabled));
+        } catch {
+            // Ignore storage write issues to avoid breaking settings UI.
+        }
+    }
+
+    private applyOnlyLiveDependencies(): void {
+        if (this.isOnlyLiveEnabled) {
+            this.isArchillectTvEnabled = true;
+            this.persistArchillectSetting(true);
+            return;
+        }
+
+        this.isArchillectTvEnabled = false;
+        this.persistArchillectSetting(false);
     }
 
     private readArchillectSetting(): boolean {
