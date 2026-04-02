@@ -2,63 +2,60 @@
     <div class="settings-card">
         <h1>Settings</h1>
 
-        <div
-            class="setting-row"
-            [class.active]="selectedSettingIndex === 0"
-            (click)="toggleOnlyLiveSetting()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 0" (click)="toggleOnlyLiveSetting()">
             <div class="setting-text">
                 <h2>Only Live</h2>
                 <p>Acikken TV yayinini kanal source linkinden canli olarak oynatir.</p>
             </div>
 
             <label class="switch" aria-label="Only Live ayari">
-                <input
-                    type="checkbox"
-                    [checked]="isOnlyLiveEnabled"
-                    (click)="$event.stopPropagation()"
+                <input type="checkbox" [checked]="isOnlyLiveEnabled" (click)="$event.stopPropagation()"
                     (change)="onOnlyLiveToggle($event)">
                 <span class="slider"></span>
             </label>
         </div>
 
-        <div
-            class="setting-row"
-            [class.active]="selectedSettingIndex === 1 && isOnlyLiveEnabled"
-            [class.disabled]="!isOnlyLiveEnabled"
-            (click)="toggleArchillectSetting()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 1 && isOnlyLiveEnabled"
+            [class.disabled]="!isOnlyLiveEnabled" (click)="toggleArchillectSetting()">
             <div class="setting-text">
                 <h2>Archillect TV</h2>
                 <p>Only Live acikken aktif olur, kapaliyken otomatik kapanir.</p>
             </div>
 
             <label class="switch" aria-label="Archillect TV ayari">
-                <input
-                    type="checkbox"
-                    [checked]="isArchillectTvEnabled"
-                    [disabled]="!isOnlyLiveEnabled"
-                    (click)="$event.stopPropagation()"
-                    (change)="onArchillectToggle($event)">
+                <input type="checkbox" [checked]="isArchillectTvEnabled" [disabled]="!isOnlyLiveEnabled"
+                    (click)="$event.stopPropagation()" (change)="onArchillectToggle($event)">
                 <span class="slider"></span>
             </label>
         </div>
 
-        <div
-            class="setting-row"
-            [class.active]="selectedSettingIndex === 2"
-            (click)="toggleAutoSwitchSetting()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 2" (click)="toggleAutoSwitchSetting()">
             <div class="setting-text">
                 <h2>Kanal Seciminde Otomatik Gecis</h2>
                 <p>Kanal listesinde saga/sola gecince Enter beklemeden kanali degistir.</p>
             </div>
 
             <label class="switch" aria-label="Kanal seciminde otomatik gecis ayari">
-                <input
-                    type="checkbox"
-                    [checked]="isChannelAutoSwitchEnabled"
-                    (click)="$event.stopPropagation()"
+                <input type="checkbox" [checked]="isChannelAutoSwitchEnabled" (click)="$event.stopPropagation()"
                     (change)="onAutoSwitchToggle($event)">
                 <span class="slider"></span>
             </label>
         </div>
+
+        <div class="setting-row" [class.active]="selectedSettingIndex === 3" (click)="onUpdateClick()">
+            <div class="setting-text">
+                <h2>Update</h2>
+                <p *ngIf="isCheckingUpdates">Guncellemeler kontrol ediliyor...</p>
+                <p *ngIf="!isCheckingUpdates && isUpdateAvailable">Uygulamayi guncellemek icin bu islemi baslat.</p>
+                <p *ngIf="!isCheckingUpdates && hasCheckedUpdates && !isUpdateAvailable">Yeni guncelleme mevcut degildir.</p>
+            </div>
+
+            <button *ngIf="isUpdateAvailable" class="action-button" type="button"
+                (click)="$event.stopPropagation(); onUpdateClick()">
+                Update
+            </button>
+        </div>
+
+        
     </div>
 </div>

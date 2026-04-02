@@ -1,6 +1,8 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { AppUpdateService } from '../../services/app-update.service';
 
 @Component({
     selector: 'app-settings',
@@ -9,7 +11,7 @@ import { Router } from '@angular/router';
     templateUrl: './settings.component.html',
     styleUrl: './settings.component.scss'
 })
-export class SettingsComponent {
+export class SettingsComponent implements OnInit, OnDestroy {
     private readonly archillectStorageKey = 'archillectTvEnabled';
     private readonly autoSwitchStorageKey = 'channelAutoSwitchEnabled';
     private readonly onlyLiveStorageKey = 'onlyLiveEnabled';
@@ -17,14 +19,40 @@ export class SettingsComponent {
     isChannelAutoSwitchEnabled = false;
     isOnlyLiveEnabled = true;
     selectedSettingIndex = 0;
+    hasCheckedUpdates = false;
+    isCheckingUpdates = false;
+    isUpdateAvailable = false;
+    private updateStateSubscription?: Subscription;
 
-    constructor(private router: Router) {}
+    constructor(
+        private router: Router,
+        private appUpdateService: AppUpdateService
+    ) { }
 
     ngOnInit(): void {
         this.isOnlyLiveEnabled = this.readOnlyLiveSetting();
         this.isArchillectTvEnabled = this.readArchillectSetting();
         this.isChannelAutoSwitchEnabled = this.readAutoSwitchSetting();
         this.applyOnlyLiveDependencies();
+
+        const state = this.appUpdateService.state;
+        this.hasCheckedUpdates = state.hasChecked;
+        this.isCheckingUpdates = state.isChecking;
+        this.isUpdateAvailable = state.updateAvailable;
+
+        this.updateStateSubscription = this.appUpdateService.state$.subscribe((nextState) => {
+            this.hasCheckedUpdates = nextState.hasChecked;
+            this.isCheckingUpdates = nextState.isChecking;
+            this.isUpdateAvailable = nextState.updateAvailable;
+        });
+
+        if (!state.hasChecked && !state.isChecking) {
+            void this.appUpdateService.checkForUpdates();
+        }
+    }
+
+    ngOnDestroy(): void {
+        this.updateStateSubscription?.unsubscribe();
     }
 
     onOnlyLiveToggle(event: Event): void {
@@ -68,6 +96,14 @@ export class SettingsComponent {
         this.persistAutoSwitchSetting(this.isChannelAutoSwitchEnabled);
     }
 
+    onUpdateClick(): void {
+        if (!this.isUpdateAvailable || this.isCheckingUpdates) {
+            return;
+        }
+
+        void this.appUpdateService.applyUpdate();
+    }
+
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent): void {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' ', 'Backspace'].includes(event.key)) {
@@ -80,7 +116,7 @@ export class SettingsComponent {
                 break;
             case 'ArrowRight':
             case 'ArrowDown':
-                this.selectedSettingIndex = Math.min(2, this.selectedSettingIndex + 1);
+                this.selectedSettingIndex = Math.min(3, this.selectedSettingIndex + 1);
                 break;
             case 'Enter':
             case ' ':
@@ -90,6 +126,8 @@ export class SettingsComponent {
                     this.toggleArchillectSetting();
                 } else if (this.selectedSettingIndex === 2) {
                     this.toggleAutoSwitchSetting();
+                } else if (this.selectedSettingIndex === 3) {
+                    this.onUpdateClick();
                 }
                 break;
             case 'Backspace':
@@ -120,8 +158,8 @@ export class SettingsComponent {
 
     private applyOnlyLiveDependencies(): void {
         if (this.isOnlyLiveEnabled) {
-            this.isArchillectTvEnabled = true;
-            this.persistArchillectSetting(true);
+            //this.isArchillectTvEnabled = true;
+            //this.persistArchillectSetting(true);
             return;
         }
 
@@ -168,4 +206,5 @@ export class SettingsComponent {
             // Ignore storage write issues to avoid breaking settings UI.
         }
     }
+
 }

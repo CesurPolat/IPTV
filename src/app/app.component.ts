@@ -1,10 +1,10 @@
 import { Component, OnDestroy } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { NotificationComponent } from './components/notification/notification.component';
-import { Updater } from 'capacitor-web-updater';
-import { environment } from '../environments/environment';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Router } from '@angular/router';
+import { AppUpdateService } from './services/app-update.service';
+import { NotificationService } from './services/notification.service';
 import { NodeJS } from 'capacitor-nodejs';
 
 @Component({
@@ -16,30 +16,17 @@ import { NodeJS } from 'capacitor-nodejs';
 })
 export class AppComponent {
   title = 'IPTV';
-  appVersion: string = environment.version;
   private backButtonListener?: Promise<{ remove: () => Promise<void> | void }>;
 
 
-  constructor(private router: Router) {
+  constructor(
+    private router: Router,
+    private appUpdateService: AppUpdateService,
+    private notificationService: NotificationService
+  ) {
 
     this.setupBackButtonListener();
-
-    Updater.echo({ value: 'Capacitor Web Updater is ready!' });
-    Updater.isLatestVersion({ value: this.appVersion }).then((result) => {
-      if (!result.value) {
-        console.log('Yeni bir güncelleme mevcut');
-        // Burada kullanıcıya güncelleme yapması için bir bildirim gösterebilirsiniz
-        Updater.getLatestVersion().then((latestVersion) => {
-          console.log('En son sürüm:', latestVersion.value);
-          document.location.href = 'index.html';
-        });
-
-      } else {
-        console.log('Uygulama en son sürümde.');
-      }
-    }).catch((error) => {
-      console.error('Güncelleme kontrolü sırasında hata oluştu:', error);
-    });
+    this.checkForUpdateNotice();
 
     console.log('Node.js ortamı hazırlanıyor...');
     NodeJS.whenReady().then(() => {
@@ -49,6 +36,16 @@ export class AppComponent {
       console.error('Node.js ortamı hazırlanırken hata oluştu:', error);
     });
 
+  }
+
+  private async checkForUpdateNotice(): Promise<void> {
+    const state = await this.appUpdateService.checkForUpdates();
+    if (!state.updateAvailable || !this.appUpdateService.shouldNotifyForCurrentVersion()) {
+      return;
+    }
+
+    this.notificationService.showInfo('Yeni surum mevcut. Ayarlar > Update ile guncelleyebilirsiniz.');
+    this.appUpdateService.markCurrentVersionAsNotified();
   }
 
   private setupBackButtonListener() {

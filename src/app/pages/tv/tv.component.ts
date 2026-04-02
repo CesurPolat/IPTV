@@ -84,8 +84,6 @@ export class TvComponent implements OnInit, OnDestroy {
     this.isArchillectTvEnabled = this.readArchillectSetting();
     this.isChannelAutoSwitchEnabled = this.readChannelAutoSwitchSetting();
 
-    this.isArchillectTvEnabled = this.isOnlyLiveEnabled;
-
     this.fetchChannels();
 
   }
@@ -215,7 +213,7 @@ export class TvComponent implements OnInit, OnDestroy {
               console.log(shouldUseArchillect ? 'ARCHILLECT TV AKTIF' : 'ARCHILLECT TV PASIF');
             }
 
-            //console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd, ' - Archillect aktif mi?:', shouldUseArchillect);
+            console.log('Oynatılan Segment URI:', uri, ' - Reklam mı?:', isAd, ' - Archillect aktif mi?:', shouldUseArchillect);
           }
         }
       }

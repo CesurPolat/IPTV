@@ -50,7 +50,7 @@ import { Observable } from 'rxjs';
     }
     .error { background: #ff4444; }
     .success { background: #00C851; }
-    .info { background: #33b5e5; }
+    .info { background: var(--background-color); }
     
     .toast-content {
       display: flex;
