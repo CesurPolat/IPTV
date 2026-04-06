@@ -883,7 +883,7 @@ export class TvComponent implements OnInit, OnDestroy {
   private updateSegmentClockLabelFromUri(uri: string): void {
     const fileName = uri.split('/').pop() || '';
     const decodedFileName = this.safeDecodeURIComponent(fileName);
-    const datedTimeMatch = decodedFileName.match(/_(\d{8})_(\d{2})-(\d{2})-(\d{2})(?:\.ts)?(?:\?|$)/i);
+    const datedTimeMatch = decodedFileName.match(/_(\d{8})_(\d{2})-(\d{2})-(\d{2})(?:_\d{5})?(?:\.ts)?(?:\?|$)/i);
 
     if (datedTimeMatch) {
       const [, day, hour, minute] = datedTimeMatch;
@@ -899,7 +899,7 @@ export class TvComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const timeMatch = decodedFileName.match(/_(\d{2})-(\d{2})-(\d{2})(?:\.ts)?(?:\?|$)/i);
+    const timeMatch = decodedFileName.match(/_(\d{2})-(\d{2})-(\d{2})(?:_\d{5})?(?:\.ts)?(?:\?|$)/i);
 
     if (!timeMatch) {
       return;
