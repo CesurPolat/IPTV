@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AppUpdateService } from '../../services/app-update.service';
+import { NotificationService } from '../../services/notification.service';
+import { ApkDownloadService } from '../../services/apk-download.service';
 
 @Component({
     selector: 'app-settings',
@@ -22,17 +24,22 @@ export class SettingsComponent implements OnInit, OnDestroy {
     hasCheckedUpdates = false;
     isCheckingUpdates = false;
     isUpdateAvailable = false;
+    isAndroidPlatform = false;
+    isDownloadingLatestApk = false;
     private updateStateSubscription?: Subscription;
 
     constructor(
         private router: Router,
-        private appUpdateService: AppUpdateService
+        private appUpdateService: AppUpdateService,
+        private notificationService: NotificationService,
+        private apkDownloadService: ApkDownloadService
     ) { }
 
     ngOnInit(): void {
         this.isOnlyLiveEnabled = this.readOnlyLiveSetting();
         this.isArchillectTvEnabled = this.readArchillectSetting();
         this.isChannelAutoSwitchEnabled = this.readAutoSwitchSetting();
+        this.isAndroidPlatform = this.apkDownloadService.isAndroidSupported();
         this.applyOnlyLiveDependencies();
 
         const state = this.appUpdateService.state;
@@ -104,6 +111,28 @@ export class SettingsComponent implements OnInit, OnDestroy {
         void this.appUpdateService.applyUpdate();
     }
 
+    async onDownloadLatestApkClick(): Promise<void> {
+        if (this.isDownloadingLatestApk) {
+            return;
+        }
+
+        if (!this.isAndroidPlatform) {
+            this.notificationService.showInfo('Latest APK indirme sadece Android cihazlarda desteklenir.');
+            return;
+        }
+
+        this.isDownloadingLatestApk = true;
+        const result = await this.apkDownloadService.downloadLatestApk();
+        this.isDownloadingLatestApk = false;
+
+        if (!result.success) {
+            this.notificationService.showError(result.errorMessage ?? 'Latest APK indirilemedi.');
+            return;
+        }
+
+        this.notificationService.showSuccess('Latest APK indirme baslatildi. Downloads klasorunu kontrol edin.');
+    }
+
     @HostListener('window:keydown', ['$event'])
     handleKeyboardEvent(event: KeyboardEvent): void {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' ', 'Backspace'].includes(event.key)) {
@@ -116,7 +145,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
                 break;
             case 'ArrowRight':
             case 'ArrowDown':
-                this.selectedSettingIndex = Math.min(3, this.selectedSettingIndex + 1);
+                this.selectedSettingIndex = Math.min(4, this.selectedSettingIndex + 1);
                 break;
             case 'Enter':
             case ' ':
@@ -128,6 +157,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
                     this.toggleAutoSwitchSetting();
                 } else if (this.selectedSettingIndex === 3) {
                     this.onUpdateClick();
+                } else if (this.selectedSettingIndex === 4) {
+                    void this.onDownloadLatestApkClick();
                 }
                 break;
             case 'Backspace':

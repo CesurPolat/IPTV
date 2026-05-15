@@ -56,6 +56,21 @@
             </button>
         </div>
 
+        <div class="setting-row" [class.active]="selectedSettingIndex === 4"
+            [class.disabled]="!isAndroidPlatform || isDownloadingLatestApk" (click)="onDownloadLatestApkClick()">
+            <div class="setting-text">
+                <h2>Latest APK</h2>
+                <p *ngIf="!isAndroidPlatform">Sadece Android cihazlarda indirilebilir.</p>
+                <p *ngIf="isAndroidPlatform && !isDownloadingLatestApk">Son APK dosyasini Downloads klasorune indir.</p>
+                <p *ngIf="isAndroidPlatform && isDownloadingLatestApk">APK indirme baslatiliyor...</p>
+            </div>
+
+            <button class="action-button" type="button" [disabled]="!isAndroidPlatform || isDownloadingLatestApk"
+                (click)="$event.stopPropagation(); onDownloadLatestApkClick()">
+                {{ isDownloadingLatestApk ? 'Indiriliyor...' : 'Latest APK Indir' }}
+            </button>
+        </div>
+
         
     </div>
 </div>

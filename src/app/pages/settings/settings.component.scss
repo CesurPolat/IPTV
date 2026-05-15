@@ -147,4 +147,17 @@
     &:active {
         transform: scale(0.98);
     }
+
+    &:disabled {
+        cursor: not-allowed;
+        opacity: 0.65;
+        background: #3a3a3a;
+        border-color: #595959;
+        transform: none;
+    }
+
+    &:disabled:hover {
+        background: #3a3a3a;
+        border-color: #595959;
+    }
 }
