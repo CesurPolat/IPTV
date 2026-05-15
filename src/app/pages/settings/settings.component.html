@@ -2,7 +2,8 @@
     <div class="settings-card">
         <h1>Settings</h1>
 
-        <div class="setting-row" [class.active]="selectedSettingIndex === 0" (click)="toggleOnlyLiveSetting()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 0" data-setting-index="0"
+            (click)="toggleOnlyLiveSetting()">
             <div class="setting-text">
                 <h2>Only Live</h2>
                 <p>Acikken TV yayinini kanal source linkinden canli olarak oynatir.</p>
@@ -15,7 +16,7 @@
             </label>
         </div>
 
-        <div class="setting-row" [class.active]="selectedSettingIndex === 1 && isOnlyLiveEnabled"
+        <div class="setting-row" [class.active]="selectedSettingIndex === 1 && isOnlyLiveEnabled" data-setting-index="1"
             [class.disabled]="!isOnlyLiveEnabled" (click)="toggleArchillectSetting()">
             <div class="setting-text">
                 <h2>Archillect TV</h2>
@@ -29,7 +30,8 @@
             </label>
         </div>
 
-        <div class="setting-row" [class.active]="selectedSettingIndex === 2" (click)="toggleAutoSwitchSetting()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 2" data-setting-index="2"
+            (click)="toggleAutoSwitchSetting()">
             <div class="setting-text">
                 <h2>Kanal Seciminde Otomatik Gecis</h2>
                 <p>Kanal listesinde saga/sola gecince Enter beklemeden kanali degistir.</p>
@@ -42,7 +44,8 @@
             </label>
         </div>
 
-        <div class="setting-row" [class.active]="selectedSettingIndex === 3" (click)="onUpdateClick()">
+        <div class="setting-row" [class.active]="selectedSettingIndex === 3" data-setting-index="3"
+            (click)="onUpdateClick()">
             <div class="setting-text">
                 <h2>Update</h2>
                 <p *ngIf="isCheckingUpdates">Guncellemeler kontrol ediliyor...</p>
@@ -56,7 +59,7 @@
             </button>
         </div>
 
-        <div class="setting-row" [class.active]="selectedSettingIndex === 4"
+        <div class="setting-row" [class.active]="selectedSettingIndex === 4" data-setting-index="4"
             [class.disabled]="!isAndroidPlatform || isDownloadingLatestApk" (click)="onDownloadLatestApkClick()">
             <div class="setting-text">
                 <h2>Latest APK</h2>
@@ -71,6 +74,50 @@
             </button>
         </div>
 
-        
+        <div class="setting-row setting-row-stack" [class.active]="selectedSettingIndex === 5" data-setting-index="5"
+            (click)="toggleChannelFilterExpanded()">
+            <div class="setting-text">
+                <h2>TV Kanal Secimi</h2>
+                <p>Buradan kanallari include veya exclude listesine alabilirsin.</p>
+                <p class="setting-subtext">{{ channelFilterSummary }}</p>
+            </div>
+
+            <button class="action-button secondary-button" type="button"
+                (click)="$event.stopPropagation(); toggleChannelFilterExpanded()">
+                {{ isChannelFilterExpanded ? 'Gizle' : 'Yonet' }}
+            </button>
+        </div>
+
+        <div class="channel-filter-panel" *ngIf="isChannelFilterExpanded">
+            <div class="mode-selector" [class.active]="selectedSettingIndex === modeSelectionIndex"
+                [attr.data-setting-index]="modeSelectionIndex">
+                <button type="button" class="mode-button" [class.selected]="tvChannelFilterMode === 'all'"
+                    (click)="setTvChannelFilterMode('all')">
+                    Hepsi
+                </button>
+                <button type="button" class="mode-button" [class.selected]="tvChannelFilterMode === 'include'"
+                    (click)="setTvChannelFilterMode('include')">
+                    Include
+                </button>
+                <button type="button" class="mode-button" [class.selected]="tvChannelFilterMode === 'exclude'"
+                    (click)="setTvChannelFilterMode('exclude')">
+                    Exclude
+                </button>
+            </div>
+
+            <div class="channel-selection-list">
+                <button type="button" class="channel-selection-item"
+                    *ngFor="let channel of availableTvChannels; let i = index"
+                    [attr.data-setting-index]="channelListStartIndex + i"
+                    [class.active]="isChannelIndexSelected(i)"
+                    [class.selected]="isTvChannelSelected(channel)"
+                    (click)="toggleTvChannelSelection(channel)">
+                    <span class="channel-name">{{ channel.name }}</span>
+                    <span class="channel-state">
+                        {{ isTvChannelSelected(channel) ? 'Secili' : 'Sec' }}
+                    </span>
+                </button>
+            </div>
+        </div>
     </div>
 </div>

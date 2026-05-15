@@ -50,9 +50,11 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewInit {
 
         console.log('[Home] Kanal listesi yükleniyor...');
         this.tvChannelsService.loadChannels().subscribe((data: Channel[]) => {
-            const dataWithIndex = data.map((item, index) => ({ ...item, originalIndex: index }));
-            this.allChannels = dataWithIndex.filter(item => item.category !== 'Series');
-            this.allSeries = dataWithIndex.filter(item => item.category === 'Series');
+            const tvChannels = data
+                .filter(item => item.category === 'TVChannel')
+                .map((item, index) => ({ ...item, originalIndex: index }));
+            this.allChannels = tvChannels;
+            this.allSeries = data.filter(item => item.category === 'Series');
             this.channels = [...this.allChannels];
             this.series = [...this.allSeries];
             this.isLoading = false;

@@ -1,10 +1,11 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { AfterViewInit, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AppUpdateService } from '../../services/app-update.service';
 import { NotificationService } from '../../services/notification.service';
 import { ApkDownloadService } from '../../services/apk-download.service';
+import { Channel, TvChannelFilterMode, TvChannelsService } from '../../services/tv-channels.service';
 
 @Component({
     selector: 'app-settings',
@@ -13,13 +14,17 @@ import { ApkDownloadService } from '../../services/apk-download.service';
     templateUrl: './settings.component.html',
     styleUrl: './settings.component.scss'
 })
-export class SettingsComponent implements OnInit, OnDestroy {
+export class SettingsComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly archillectStorageKey = 'archillectTvEnabled';
     private readonly autoSwitchStorageKey = 'channelAutoSwitchEnabled';
     private readonly onlyLiveStorageKey = 'onlyLiveEnabled';
+    private readonly baseSettingCount = 6;
     isArchillectTvEnabled = true;
     isChannelAutoSwitchEnabled = false;
     isOnlyLiveEnabled = true;
+    tvChannelFilterMode: TvChannelFilterMode = 'all';
+    availableTvChannels: Channel[] = [];
+    isChannelFilterExpanded = false;
     selectedSettingIndex = 0;
     hasCheckedUpdates = false;
     isCheckingUpdates = false;
@@ -32,15 +37,18 @@ export class SettingsComponent implements OnInit, OnDestroy {
         private router: Router,
         private appUpdateService: AppUpdateService,
         private notificationService: NotificationService,
-        private apkDownloadService: ApkDownloadService
+        private apkDownloadService: ApkDownloadService,
+        private tvChannelsService: TvChannelsService
     ) { }
 
     ngOnInit(): void {
         this.isOnlyLiveEnabled = this.readOnlyLiveSetting();
         this.isArchillectTvEnabled = this.readArchillectSetting();
         this.isChannelAutoSwitchEnabled = this.readAutoSwitchSetting();
+        this.tvChannelFilterMode = this.tvChannelsService.getTvChannelFilterMode();
         this.isAndroidPlatform = this.apkDownloadService.isAndroidSupported();
         this.applyOnlyLiveDependencies();
+        this.loadAvailableTvChannels();
 
         const state = this.appUpdateService.state;
         this.hasCheckedUpdates = state.hasChecked;
@@ -60,6 +68,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     ngOnDestroy(): void {
         this.updateStateSubscription?.unsubscribe();
+    }
+
+    ngAfterViewInit(): void {
+        this.scheduleScrollToSelected();
     }
 
     onOnlyLiveToggle(event: Event): void {
@@ -103,6 +115,76 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.persistAutoSwitchSetting(this.isChannelAutoSwitchEnabled);
     }
 
+    toggleChannelFilterExpanded(): void {
+        this.isChannelFilterExpanded = !this.isChannelFilterExpanded;
+        if (!this.isChannelFilterExpanded && this.selectedSettingIndex > this.baseSettingCount - 1) {
+            this.selectedSettingIndex = this.baseSettingCount - 1;
+        }
+
+        this.scheduleScrollToSelected();
+    }
+
+    setTvChannelFilterMode(mode: TvChannelFilterMode): void {
+        this.tvChannelFilterMode = mode;
+        this.tvChannelsService.setTvChannelFilterMode(mode);
+        this.scheduleScrollToSelected();
+    }
+
+    cycleTvChannelFilterMode(): void {
+        const modes: TvChannelFilterMode[] = ['all', 'include', 'exclude'];
+        const currentIndex = modes.indexOf(this.tvChannelFilterMode);
+        this.setTvChannelFilterMode(modes[(currentIndex + 1) % modes.length]);
+    }
+
+    toggleTvChannelSelection(channel: Channel): void {
+        this.tvChannelsService.toggleTvChannelSelection(channel);
+        this.scheduleScrollToSelected();
+    }
+
+    isTvChannelSelected(channel: Channel): boolean {
+        return this.tvChannelsService.isTvChannelSelected(channel);
+    }
+
+    get channelFilterSummary(): string {
+        const selectedCount = this.tvChannelsService.getSelectedTvChannelIds().length;
+
+        if (this.tvChannelFilterMode === 'include') {
+            return selectedCount > 0
+                ? `${selectedCount} kanal include listesinde.`
+                : 'Include modu acik, henuz kanal secilmedi.';
+        }
+
+        if (this.tvChannelFilterMode === 'exclude') {
+            return selectedCount > 0
+                ? `${selectedCount} kanal exclude listesinde.`
+                : 'Exclude modu acik, henuz kanal secilmedi.';
+        }
+
+        return selectedCount > 0
+            ? `${selectedCount} kanal secili, filtre pasif.`
+            : 'Tum TV kanallari aktif.';
+    }
+
+    get modeSelectionIndex(): number {
+        return this.baseSettingCount;
+    }
+
+    get channelListStartIndex(): number {
+        return this.baseSettingCount + 1;
+    }
+
+    get maxSelectableIndex(): number {
+        if (!this.isChannelFilterExpanded) {
+            return this.baseSettingCount - 1;
+        }
+
+        return this.channelListStartIndex + this.availableTvChannels.length - 1;
+    }
+
+    isChannelIndexSelected(index: number): boolean {
+        return this.selectedSettingIndex === this.channelListStartIndex + index;
+    }
+
     onUpdateClick(): void {
         if (!this.isUpdateAvailable || this.isCheckingUpdates) {
             return;
@@ -142,10 +224,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
         switch (event.key) {
             case 'ArrowUp':
                 this.selectedSettingIndex = Math.max(0, this.selectedSettingIndex - 1);
+                this.scheduleScrollToSelected();
                 break;
             case 'ArrowRight':
             case 'ArrowDown':
-                this.selectedSettingIndex = Math.min(4, this.selectedSettingIndex + 1);
+                this.selectedSettingIndex = Math.min(this.maxSelectableIndex, this.selectedSettingIndex + 1);
+                this.scheduleScrollToSelected();
                 break;
             case 'Enter':
             case ' ':
@@ -159,12 +243,49 @@ export class SettingsComponent implements OnInit, OnDestroy {
                     this.onUpdateClick();
                 } else if (this.selectedSettingIndex === 4) {
                     void this.onDownloadLatestApkClick();
+                } else if (this.selectedSettingIndex === 5) {
+                    this.toggleChannelFilterExpanded();
+                } else if (this.selectedSettingIndex === this.modeSelectionIndex) {
+                    this.cycleTvChannelFilterMode();
+                } else {
+                    const channel = this.availableTvChannels[this.selectedSettingIndex - this.channelListStartIndex];
+                    if (channel) {
+                        this.toggleTvChannelSelection(channel);
+                    }
                 }
                 break;
             case 'Backspace':
                 this.router.navigate(['/home']);
                 break;
         }
+    }
+
+    private loadAvailableTvChannels(): void {
+        this.tvChannelsService.getAvailableTvChannels().subscribe({
+            next: (channels) => {
+                this.availableTvChannels = [...channels].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+                this.scheduleScrollToSelected();
+            },
+            error: () => {
+                this.availableTvChannels = [];
+            }
+        });
+    }
+
+    private scheduleScrollToSelected(): void {
+        setTimeout(() => this.scrollToSelectedSetting());
+    }
+
+    private scrollToSelectedSetting(): void {
+        const selectedElement = document.querySelector<HTMLElement>(`[data-setting-index="${this.selectedSettingIndex}"]`);
+        if (!selectedElement) {
+            return;
+        }
+
+        selectedElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
     }
 
     private readOnlyLiveSetting(): boolean {

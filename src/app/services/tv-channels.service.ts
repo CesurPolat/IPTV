@@ -46,21 +46,74 @@ export interface BroadcastSchedule {
   date: string;
 }
 
+export type TvChannelFilterMode = 'all' | 'include' | 'exclude';
+
 @Injectable({
   providedIn: 'root'
 })
 export class TvChannelsService {
 
   private static baseUrl = environment.baseUrl;
+  private readonly tvChannelFilterModeStorageKey = 'tvChannelFilterMode';
+  private readonly tvChannelFilterIdsStorageKey = 'tvChannelFilterIds';
 
   private channels: Channel[] = [];
+  private tvChannelFilterMode: TvChannelFilterMode = 'all';
+  private selectedTvChannelIds = new Set<string>();
 
   constructor(
     private http: HttpClient,
     private notificationService: NotificationService
-  ) { }
+  ) {
+    this.tvChannelFilterMode = this.readTvChannelFilterMode();
+    this.selectedTvChannelIds = this.readSelectedTvChannelIds();
+  }
 
   loadChannels(): Observable<Channel[]> {
+    return this.loadRawChannels().pipe(
+      map((channels) => this.applyTvChannelFilter(channels))
+    );
+  }
+
+  getAvailableTvChannels(): Observable<Channel[]> {
+    return this.loadRawChannels().pipe(
+      map((channels) => channels.filter((channel) => channel.category === 'TVChannel'))
+    );
+  }
+
+  getTvChannelFilterMode(): TvChannelFilterMode {
+    return this.tvChannelFilterMode;
+  }
+
+  setTvChannelFilterMode(mode: TvChannelFilterMode): void {
+    this.tvChannelFilterMode = mode;
+    try {
+      localStorage.setItem(this.tvChannelFilterModeStorageKey, mode);
+    } catch {
+      // Ignore storage write issues to avoid breaking settings UI.
+    }
+  }
+
+  getSelectedTvChannelIds(): string[] {
+    return Array.from(this.selectedTvChannelIds);
+  }
+
+  isTvChannelSelected(channel: Channel): boolean {
+    return this.selectedTvChannelIds.has(this.getTvChannelSelectionKey(channel));
+  }
+
+  toggleTvChannelSelection(channel: Channel): void {
+    const key = this.getTvChannelSelectionKey(channel);
+    if (this.selectedTvChannelIds.has(key)) {
+      this.selectedTvChannelIds.delete(key);
+    } else {
+      this.selectedTvChannelIds.add(key);
+    }
+
+    this.persistSelectedTvChannelIds();
+  }
+
+  private loadRawChannels(): Observable<Channel[]> {
     const hasChannels = this.channels.length > 0;
     const channelsLoadTime = parseInt(localStorage.getItem('channelsLoadTime') || '0');
     const isCacheValid = channelsLoadTime > Date.now();
@@ -81,6 +134,64 @@ export class TvChannelsService {
         })
       ))
     );
+  }
+
+  private applyTvChannelFilter(channels: Channel[]): Channel[] {
+    if (this.tvChannelFilterMode === 'all') {
+      return channels;
+    }
+
+    return channels.filter((channel) => {
+      if (channel.category !== 'TVChannel') {
+        return true;
+      }
+
+      const isSelected = this.selectedTvChannelIds.has(this.getTvChannelSelectionKey(channel));
+      return this.tvChannelFilterMode === 'include' ? isSelected : !isSelected;
+    });
+  }
+
+  private getTvChannelSelectionKey(channel: Channel): string {
+    return channel.channelId || channel.id || channel.name;
+  }
+
+  private readTvChannelFilterMode(): TvChannelFilterMode {
+    try {
+      const stored = localStorage.getItem(this.tvChannelFilterModeStorageKey);
+      if (stored === 'all' || stored === 'include' || stored === 'exclude') {
+        return stored;
+      }
+    } catch {
+      // Ignore storage read issues and fall back to defaults.
+    }
+
+    return 'all';
+  }
+
+  private readSelectedTvChannelIds(): Set<string> {
+    try {
+      const stored = localStorage.getItem(this.tvChannelFilterIdsStorageKey);
+      if (!stored) {
+        return new Set<string>();
+      }
+
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return new Set<string>(parsed.filter((item): item is string => typeof item === 'string'));
+      }
+    } catch {
+      // Ignore storage read issues and fall back to defaults.
+    }
+
+    return new Set<string>();
+  }
+
+  private persistSelectedTvChannelIds(): void {
+    try {
+      localStorage.setItem(this.tvChannelFilterIdsStorageKey, JSON.stringify(Array.from(this.selectedTvChannelIds)));
+    } catch {
+      // Ignore storage write issues to avoid breaking settings UI.
+    }
   }
 
   getCurrentSchedule(_channel: Channel[]): Observable<Channel[]> {
