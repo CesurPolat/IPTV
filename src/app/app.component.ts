@@ -5,7 +5,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Router } from '@angular/router';
 import { AppUpdateService } from './services/app-update.service';
 import { NotificationService } from './services/notification.service';
-import { NodeJS } from 'capacitor-nodejs';
+/* import { NodeJS } from 'capacitor-nodejs'; */
 
 @Component({
   selector: 'app-root',
@@ -28,13 +28,13 @@ export class AppComponent {
     this.setupBackButtonListener();
     this.checkForUpdateNotice();
 
-    console.log('Node.js ortamı hazırlanıyor...');
+    /* console.log('Node.js ortamı hazırlanıyor...');
     NodeJS.whenReady().then(() => {
       console.log('Node.js ortamı hazır!');
       // Node.js ile ilgili işlemler burada yapılabilir
     }).catch((error) => {
       console.error('Node.js ortamı hazırlanırken hata oluştu:', error);
-    });
+    }); */
 
   }
 

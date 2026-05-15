@@ -6,9 +6,9 @@ const config: CapacitorConfig = {
   webDir: 'dist/iptv/browser',
   plugins: {
     
-    CapacitorNodeJS: {
+    /* CapacitorNodeJS: {
       "nodeDir": "nodejs"
-    },
+    }, */
 
     Updater: {
       baseServerUrl: 'https://cdn.advanced-streaming.online',
