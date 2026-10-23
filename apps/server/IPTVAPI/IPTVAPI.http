@@ -1,0 +1,6 @@
+@IPTVAPI_HostAddress = http://localhost:5296
+
+GET {{IPTVAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

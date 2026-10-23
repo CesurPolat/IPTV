@@ -1,0 +1,13 @@
+{
+  "name": "@iptv/node-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "~22.13.13",
+    "typescript": "~5.4.2"
+  }
+}

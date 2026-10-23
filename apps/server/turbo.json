@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "cache": false,
+      "outputs": []
+    },
+    "dev": {
+      "passThroughEnv": ["ASPNETCORE_*", "DOTNET_*", "MongoDBSettings__*", "Recording__*", "Storage__*", "GoogleOAuth__*", "FlareSolverrUrl", "BrowserWSEndpoint"]
+    }
+  }
+}
