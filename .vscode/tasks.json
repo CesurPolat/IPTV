@@ -22,7 +22,8 @@
     },
     {
       "type": "npm",
-      "script": "test",
+      "label": "npm: test",
+      "script": "test:watch",
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",

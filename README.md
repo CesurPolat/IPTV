@@ -1,27 +1,91 @@
-# IPTV
+﻿# IPTV
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.3.8.
+Angular 17 and Capacitor application managed with npm workspaces and Turborepo.
 
-## Development server
+## Repository layout
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+```text
+apps/client/                 Angular application and Capacitor configuration
+  src/                     Application source and environments
+  android/                 Native Android project
+  dist/iptv/browser/        Web build output (generated)
+packages/node-bridge/       Embedded Node.js bridge
+  src/                     Bridge source and type declarations
+  dist/                    Compiled bridge (generated)
+tsconfig.json              Shared TypeScript and Angular compiler settings
+turbo.json                 Task dependencies and build cache configuration
+```
 
-## Code scaffolding
+## Setup
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+Install dependencies from the repository root:
 
-## Build
+```sh
+npm ci
+```
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+The existing local Capacitor updater dependency is still required alongside this
+repository at `../capacitor-web-updater`. Its package must include its compiled
+`dist/` files, as before this migration. The application references it through
+`file:../../../capacitor-web-updater` from `apps/client`.
 
-## Running unit tests
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Development
 
-## Running end-to-end tests
+```sh
+npm run dev
+```
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+Open `http://localhost:4200`. `npm start` is also supported. Development environment
+settings are in `apps/client/src/environments/environment.development.ts`.
 
-## Further help
+Turbo builds the Node bridge before starting Angular. After changing bridge source,
+restart the development server to rebuild it. `npm run watch` provides Angular's
+development build watcher with the same initial bridge build.
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+Generate Angular code from the root with, for example:
+
+```sh
+npm run ng -- generate component components/example
+```
+
+## Build and checks
+
+```sh
+npm run build
+npm run typecheck
+npm test
+```
+
+The build compiles `@iptv/node-bridge` first, then `@iptv/client`. Angular copies the
+bridge output into `dist/iptv/browser/nodejs/` inside the application workspace.
+Turbo caches each package's `dist/` output locally in `.turbo/`.
+
+Tests run once using ChromeHeadless, which requires Chrome or Chromium. Set
+`CHROME_BIN` if the browser is installed in a nonstandard location. Use
+`npm run test:watch` for interactive Karma tests.
+
+Build only the bridge with `npm run build:nodejs`. To pass Angular-specific build
+options directly, first build the bridge, then use the application workspace:
+
+```sh
+npm run build:nodejs
+npm run build --workspace=@iptv/client -- --configuration development
+```
+
+## Android
+
+```sh
+npm run cap:sync
+npm run cap:open
+```
+
+`cap:sync` builds the web assets and syncs them to the Android project.
+`cap:open` opens `apps/client/android` in Android Studio. Native compilation still
+requires the Android SDK and the JDK required by the existing Gradle project.
+
+Run Capacitor commands from `apps/client`, or through the root scripts above, so
+Capacitor can find its configuration. To add another application or shared package,
+create a package with a unique name under `apps/*` or `packages/*`, declare any
+workspace dependencies in its `package.json`, then run `npm install` at the root.
