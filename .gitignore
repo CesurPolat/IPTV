@@ -43,3 +43,9 @@ testem.log
 Thumbs.db
 
 static/nodejs/dist
+
+# Server local configuration and runtime data
+apps/server/IPTVAPI/appsettings.Local.json
+apps/server/**/FileStorage/
+apps/server/**/Recordings/
+apps/server/**/recordings/

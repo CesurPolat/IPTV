@@ -9,15 +9,18 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:client": "turbo run dev --filter=@iptv/client",
+    "dev:server": "turbo run dev --filter=@iptv/server",
     "start": "turbo run dev",
     "build": "turbo run build",
+    "build:server": "turbo run build --filter=@iptv/server",
     "build:nodejs": "turbo run build --filter=@iptv/node-bridge",
     "watch": "turbo run watch",
     "test": "turbo run test",
     "test:watch": "npm run test:watch --workspace=@iptv/client",
     "typecheck": "turbo run typecheck",
     "ng": "npm run ng --workspace=@iptv/client --",
-    "cap:sync": "npm run build && npm run cap:sync --workspace=@iptv/client",
+    "cap:sync": "turbo run build --filter=@iptv/client... && npm run cap:sync --workspace=@iptv/client",
     "cap:open": "npm run cap:open --workspace=@iptv/client"
   },
   "devDependencies": {

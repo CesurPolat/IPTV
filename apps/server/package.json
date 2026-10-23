@@ -1,0 +1,11 @@
+{
+  "name": "@iptv/server",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "dotnet watch --project IPTVAPI/IPTVAPI.csproj run --launch-profile https",
+    "start": "dotnet run --project IPTVAPI/IPTVAPI.csproj --launch-profile https",
+    "build": "dotnet build IPTVAPI.sln --configuration Release",
+    "restore": "dotnet restore IPTVAPI.sln"
+  }
+}
