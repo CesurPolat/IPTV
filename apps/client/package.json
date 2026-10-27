@@ -32,7 +32,7 @@
     "@ng-icons/core": "^27.5.2",
     "@ng-icons/material-icons": "^27.5.2",
     "@types/video.js": "^7.3.58",
-    "capacitor-web-updater": "file:../../../capacitor-web-updater",
+    "capacitor-web-updater": "*",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "video.js": "^8.22.0",

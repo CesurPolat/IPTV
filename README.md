@@ -15,6 +15,9 @@ apps/server/               .NET 8 API solution and its five C# projects
 packages/node-bridge/       Embedded Node.js bridge
   src/                     Bridge source and type declarations
   dist/                    Compiled bridge (generated)
+packages/capacitor-web-updater/  Capacitor updater plugin (web, Android and iOS)
+  src/                     Plugin source and type declarations
+  dist/                    Compiled plugin (generated)
 tsconfig.json              Shared TypeScript and Angular compiler settings
 turbo.json                 Task dependencies and build cache configuration
 ```
@@ -27,10 +30,9 @@ Install dependencies from the repository root:
 npm ci
 ```
 
-The existing local Capacitor updater dependency is still required alongside this
-repository at `../capacitor-web-updater`. Its package must include its compiled
-`dist/` files, as before this migration. The application references it through
-`file:../../../capacitor-web-updater` from `apps/client`.
+The Capacitor updater plugin is included in `packages/capacitor-web-updater` as
+an npm workspace. No sibling checkout is required. Turbo builds the plugin before
+the client during development, builds and Capacitor sync.
 
 On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
 
@@ -69,7 +71,8 @@ npm run typecheck
 npm test
 ```
 
-The build compiles `@iptv/node-bridge` first, then `@iptv/client`. Angular copies the
+The build compiles `@iptv/node-bridge` and `capacitor-web-updater` before
+`@iptv/client`. Angular copies the
 bridge output into `dist/iptv/browser/nodejs/` inside the application workspace.
 Turbo caches each package's `dist/` output locally in `.turbo/`.
 
