@@ -22,7 +22,7 @@ public class UpdaterPlugin extends Plugin {
 
     @Override
     public void load() {
-        String baseServerUrl = getConfig().getString("baseServerUrl", "https://advanced-streaming.online");
+        String baseServerUrl = getConfig().getString("baseServerUrl", "https://iptvcdn.cesurpolat.dev");
 
         implementation = new Updater(baseServerUrl);
     }

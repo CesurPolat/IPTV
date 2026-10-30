@@ -11,7 +11,7 @@ const config: CapacitorConfig = {
     }, */
 
     Updater: {
-      baseServerUrl: 'https://cdn.advanced-streaming.online',
+      baseServerUrl: 'https://iptvcdn.cesurpolat.dev',
     }
   }
 };
