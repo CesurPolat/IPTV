@@ -13,6 +13,7 @@
     "dev:server": "turbo run dev --filter=@iptv/server",
     "start": "turbo run dev",
     "build": "turbo run build",
+    "deploy": "firebase deploy --only hosting",
     "build:server": "turbo run build --filter=@iptv/server",
     "build:nodejs": "turbo run build --filter=@iptv/node-bridge",
     "watch": "turbo run watch",
