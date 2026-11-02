@@ -11,22 +11,35 @@ namespace IPTVAPI.Controllers
     {
         private readonly IStreamingService _dizipalService;
         private readonly IStreamingService _roketdiziService;
+        private readonly IShortizleResolver _shortizle;
 
         public StreamingController(
             [FromKeyedServices("Dizipal")] IStreamingService dizipalService, 
-            [FromKeyedServices("Roketdizi")] IStreamingService roketdiziService)
+            [FromKeyedServices("Roketdizi")] IStreamingService roketdiziService,
+            IShortizleResolver shortizle)
         {
             _dizipalService = dizipalService;
             _roketdiziService = roketdiziService;
+            _shortizle = shortizle;
         }
 
         [HttpGet]
+        [ShortizleErrors]
         public async Task<IActionResult> GetMediaUrl(string url)
         {
-            var decodedUrl = System.Web.HttpUtility.UrlDecode(url);
+            // Query binding already decodes the URL once. A second decode corrupts signed URLs.
+            var decodedUrl = url;
+            if (!Uri.TryCreate(decodedUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http"))
+                throw new ShortizleException(400, "invalid_url", "Geçerli bir bölüm adresi gerekiyor.");
+            if (uri.Host.Equals("shortizle.com", StringComparison.OrdinalIgnoreCase))
+            {
+                var id = await _shortizle.ResolveAsync(uri, HttpContext.RequestAborted);
+                Response.Headers.CacheControl = "no-store";
+                return Content($"{ShortizleController.PlaybackBase(Request)}/Streaming/Shortizle/{id}/master.m3u8", "text/plain");
+            }
             
             // URL'e göre hangi servisin kullanılacağına karar ver
-            var service = decodedUrl.Contains("roketdizi", StringComparison.OrdinalIgnoreCase) 
+            var service = uri.Host.Contains("roketdizi", StringComparison.OrdinalIgnoreCase)
                 ? _roketdiziService 
                 : _dizipalService;
             

@@ -1,7 +1,10 @@
 import { Component, HostListener, AfterViewInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import videojs from 'video.js';
+import { NavigationService } from '../../services/navigation.service';
+import { TvChannelsService } from '../../services/tv-channels.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-player',
@@ -17,16 +20,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   currentTime = 0;
   duration = 0;
   showControls = true;
+  nextEpisodeLoading = false;
+  nextEpisodeError = '';
+  private seriesUrl = '';
+  private seasonNumber = 0;
+  private episodeNumber = 0;
+  private routeSubscription?: Subscription;
+  private generation = 0;
+  private destroyed = false;
   private currentUrl = '';
   private controlsTimeout?: any;
 
   constructor(
     private cdr: ChangeDetectorRef,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private navService: NavigationService,
+    private tvChannelsService: TvChannelsService,
+    private router: Router
   ) {}
 
   ngAfterViewInit() {
-    this.route.queryParams.subscribe(params => {
+    this.routeSubscription = this.route.queryParams.subscribe(params => {
+      this.generation++;
+      this.nextEpisodeLoading = false;
+      this.nextEpisodeError = '';
+      this.seriesUrl = params['series'] || '';
+      this.seasonNumber = Number(params['season']) || 0;
+      this.episodeNumber = Number(params['episode']) || 0;
       const url = params['url'];
       if (url) {
         this.initializePlayer(url);
@@ -39,6 +59,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
+    this.generation++;
+    this.routeSubscription?.unsubscribe();
     this.savePosition();
     if (this.player) {
       this.player.dispose();
@@ -48,10 +71,49 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  async playNextEpisode() {
+    if (this.destroyed || this.nextEpisodeLoading || !this.seriesUrl || !this.seasonNumber || !this.episodeNumber) return;
+    const generation = this.generation;
+    this.nextEpisodeLoading = true;
+    this.nextEpisodeError = '';
+    this.cdr.detectChanges();
+    try {
+      const detail = await this.tvChannelsService.getSeriesDetails(this.seriesUrl);
+      if (this.destroyed || generation !== this.generation) return;
+      if (!detail) throw new Error('Sonraki bölümün bilgileri alınamadı.');
+      const seasons = Array.isArray(detail.containsSeason) ? detail.containsSeason : detail.containsSeason ? [detail.containsSeason] : [];
+      const episodes = [...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber).flatMap(season => {
+        const items = Array.isArray(season.episode) ? season.episode : season.episode ? [season.episode] : [];
+        return [...items].sort((a, b) => a.episodeNumber - b.episodeNumber)
+          .map(episode => ({ ...episode, season: season.seasonNumber }));
+      });
+      const current = episodes.findIndex(e => e.season === this.seasonNumber && e.episodeNumber === this.episodeNumber);
+      if (current < 0) throw new Error('Geçerli bölüm dizi listesinde bulunamadı.');
+      const next = episodes[current + 1];
+      if (!next) return;
+      const url = await this.tvChannelsService.getVideoUrl(next.url);
+      if (this.destroyed || generation !== this.generation) return;
+      const navigated = await this.router.navigate(['/player'], { queryParams: {
+        url, series: this.seriesUrl, season: next.season, episode: next.episodeNumber
+      }, replaceUrl: true });
+      if (!navigated && generation === this.generation) throw new Error('Sonraki bölüme geçilemedi.');
+    } catch (error) {
+      if (!this.destroyed && generation === this.generation) {
+        this.nextEpisodeError = error instanceof Error ? error.message : 'Sonraki bölüm açılamadı.';
+      }
+    } finally {
+      if (!this.destroyed && generation === this.generation) {
+        this.nextEpisodeLoading = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
   @HostListener('window:beforeunload')
   savePosition() {
     if (this.player && this.currentUrl) {
       const currentTime = this.player.currentTime();
+      if (typeof currentTime !== 'number' || !Number.isFinite(currentTime)) return;
       // Eğer videonun sonuna çok yakınsa (son 10 saniye), kaldığı yeri temizle ki baştan başlasın
       if (this.duration > 0 && this.duration - currentTime < 10) {
         localStorage.removeItem(`playback_pos_${this.currentUrl}`);
@@ -80,7 +142,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
+    if (event.key === 'Backspace' || event.key === 'Escape') {
+      event.preventDefault();
+      this.navService.back('/series');
+      return;
+    }
     if (!this.player) return;
+
+    if ((event.target as HTMLElement | null)?.closest?.('button, input')) return;
 
     this.resetControlsTimer();
 
@@ -89,9 +158,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } */
 
     switch (event.key) {
-      case 'Backspace':
-        window.location.href = 'index.html';
-        break;
       case 'Enter':
         this.togglePlay();
         break;
@@ -153,15 +219,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   initializePlayer(url: string) {
     if (this.player) {
       this.savePosition();
-      this.player.dispose();
     }
 
     this.currentUrl = url;
+    this.currentTime = 0;
+    this.duration = 0;
+    this.isPlaying = false;
     const type = this.getVideoType(url);
+
+    if (this.player) {
+      // Reuse the video element: dispose() removes it from the DOM.
+      this.player.autoplay(true);
+      this.player.src({ src: url, type });
+      return;
+    }
 
     this.player = videojs('my-video', {
       controls: false,
-      fluid: true,
+      fluid: false,
+      fill: true,
       autoplay: true,
       responsive: true,
       sources: [{
@@ -173,6 +249,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.player.on('play', () => {
       this.isPlaying = true;
       this.cdr.detectChanges();
+    });
+    this.player.on('ended', () => {
+      this.isPlaying = false;
+      this.savePosition();
+      void this.playNextEpisode();
     });
     this.player.on('pause', () => {
       this.isPlaying = false;

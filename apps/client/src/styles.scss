@@ -12,3 +12,17 @@ body {
     margin: 0;
     font-family: 'Inter', sans-serif;
 }
+
+/* Video.js creates these elements outside Angular's scoped styles. */
+app-player .video-wrapper .video-js {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding-top: 0;
+}
+
+app-player .video-wrapper .vjs-tech {
+    object-fit: contain;
+    object-position: center;
+}

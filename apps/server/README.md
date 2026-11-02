@@ -1,3 +1,76 @@
+# Shortizle koleksiyon ve dizi listesi
+
+## Arşiv araması
+
+`GET /Streaming/Shortizle/search` sabit `https://shortizle.com/archive` adresine filtreli istek yapar; HTML içindeki Inertia verisini veya doğrudan JSON yanıtını okuyabilir.
+
+```http
+GET /Streaming/Shortizle/search?genres%5B%5D=aksiyon&platform=reelshort&kind=dublaj&sort=popular&q=selam&view=grid&page=1
+GET /Streaming/Shortizle/search?kind=dublaj&sort=popular&q=&view=grid
+```
+
+Desteklenen parametreler: `q` (en fazla 200 karakter), tekrarlanabilen `genres[]`, `platform`, `kind` (boş/dublaj/altyazi), `sort` (popular/new/rating), `view` (grid/list), `page` (pozitif sayfa numarası). Varsayılanlar: boş arama ve dil filtresi, popular sıralama, grid görünüm, sayfa 1. Boş `q` ile filtreli liste alınabilir.
+
+Yanıt `{ items, page, lastPage, perPage, total, options: { genres, platforms } }` biçimindedir. `items` koleksiyonlarla aynı dizi kartı alanlarını kullanır; filtre seçenekleri `{ value, label }` biçimindedir. Sayfa bilgileri upstream’den korunur, boş sonuç hata sayılmaz. Filtre hataları `400 invalid_search`, eksik sonuç/sayfalama şeması `502 invalid_search_response` döndürür. Başarılı aramalar her filtre/sayfa birleşimi için 2 dakika önbellekte tutulur.
+
+Client `/series` ekranında arama formu, çoklu tür seçimi, platform/dil/sıralama, ızgara/liste görünümü ve Önceki/Sonraki sayfa kontrolleri bulunur. Ara düğmesi filtreleri uygular ve sayfayı 1’e döndürür; filtreler URL’de saklanır. Genel arama ekranı da Shortizle sonuçlarını mevcut sağlayıcılarla birleştirir; bir sağlayıcı hata verirse diğerinin sonuçları gösterilir. Dizi seçimi mevcut detay ve oynatma akışını kullanır.
+
+Site `kind=dublaj` seçiliyken bazen `has_dublaj=false` olan kayıtlar da döndürebilir. API filtreyi aynen iletir ve upstream dil işaretlerini değiştirmez.
+
+## Koleksiyonlar ve detay
+
+- `GET /Streaming/Shortizle/collections`: `/koleksiyonlar` sayfasındaki Inertia JSON verisini okuyup `{ heading, collections: [{ key, title, items }] }` döndürür. Ayrıntılı `desktopCollections` varsa kullanılır; aksi halde `collections` okunur. Her dizi `id`, `slug`, `name`, `url`, `posterUrl`, `description`, `episodeCount`, `hasDublaj`, `hasAltyazi`, `isAdult` alanlarını taşır. Film kayıtları ve aynı grup içindeki yinelenen diziler elenir; farklı koleksiyonlarda tekrar görünmesi korunur.
+- `GET /Streaming/Shortizle/series/{slug}`: `/icerik/{slug}` sayfasından gerçek sezon ve bölüm numaralarını okuyup mevcut `StreamingSeriesDetail` biçiminde döndürür. Yakında yayınlanacak bölümler listelenmez. Bölüm adresleri `/watch/{slug}/{sezon}/{bolum}` biçimindedir.
+
+Başarılı katalog ve detay yanıtları sunucuda 5 dakika bellekte tutulur. Boş koleksiyon listesi geçerlidir; sayfa şeması eksikse `502 invalid_catalog` veya `502 invalid_series`, geçersiz slug için `400 invalid_slug` döner.
+
+Client’ta **Movies → `/series`** açılınca koleksiyonlar afişli gruplar olarak gösterilir. Dizi seçimi `/series?url=https://shortizle.com/icerik/{slug}` detay ekranına, bölüm seçimi mevcut çözümleyici üzerinden player’a gider. Kumanda yön tuşları ve Enter ile gezilebilir. Yükleme, boş liste ve tekrar deneme durumları bulunur. Eski sağlayıcıların detay bağlantıları mevcut endpoint’i kullanmayı sürdürür.
+
+# Shortizle bölüm oynatma API’si
+
+Shortizle bölüm sayfasını URL-encode ederek mevcut endpoint’e verin:
+
+```http
+GET /Streaming/GetMediaUrl?url=https%3A%2F%2Fshortizle.com%2Fwatch%2Fustanin-oyunu-rjes%2F1%2F1
+```
+
+Başarılı yanıt `200 text/plain` olarak oynatma URL’si döndürür:
+
+```text
+https://iptvapi.cesurpolat.dev/Streaming/Shortizle/<sessionId>/master.m3u8
+```
+
+Client mevcut `response.text()` akışını kullanır. Bu adresi player’a HLS kaynağı olarak verin; `/GetMediaUrl` adresini doğrudan video kaynağı yapmayın:
+
+```typescript
+const episodeUrl = 'https://shortizle.com/watch/ustanin-oyunu-rjes/1/1';
+const response = await fetch(`${apiBase}/Streaming/GetMediaUrl?url=${encodeURIComponent(episodeUrl)}`);
+if (!response.ok) throw await response.json();
+const playbackUrl = await response.text();
+router.navigate(['/player'], { queryParams: { url: playbackUrl } });
+```
+
+API anonim ve ayrı bir çerez oturumu kurar. Giriş/abonelik gerektiren içerik açılmaz. Manifest, alt playlist, segment, anahtar ve HLS altyazı adresleri API üzerinden aynı oturumla sunulur. Kaynak adresleri ve upstream çerezleri client’a verilmez. Mevcut Dizipal ve Roketdizi akışları korunur.
+
+Oynatma oturumları 30 dakika hareketsizlikten sonra veya API yeniden başlatıldığında biter. Birden fazla API instance’ı kullanılıyorsa oynatma istekleri aynı instance’a yönlendirilmelidir. Oturum URL’leri erişim anahtarı gibi ele alınmalı ve paylaşılmamalıdır.
+
+Süre bilgisi olan kaynaklar, master yeniden istendiğinde süre bitimine 60 saniye kala aynı kaynak kimliğiyle yenilenir. Eski kaynak kimlikleri eski upstream adresini korur; süresi biten eski segmentler yeni kaynağa eşlenmez. Oynatıcı eski playlisti kullanmaya devam ederken upstream erişimi biterse `/GetMediaUrl` yeniden çağrılıp yeni master yüklenmelidir. API oturumu için `410 session_expired` da aynı şekilde ele alınır.
+
+Hatalar `application/problem+json` ve `code` alanı taşır: geçersiz adres `400`, giriş gereksinimi `401`, erişim reddi `403`, bulunamayan bölüm/kaynak `404`, bitmiş oturum `410`, upstream/geçersiz manifest/desteklenmeyen kaynak `502`, zaman aşımı `504`. HTTP 200 dönen HTML, HLS kabul edilmez. Upstream’de identity istenir; gzip/deflate/Brotli çözülür, zstd `502 unsupported_encoding` döndürür.
+
+İzinli upstream host’ları `shortizle.com`, `api.mybigdramapool.com`, `storage-pilot.shortizle.com`, `stream.shortizle.com` ve `short-depo-test.b-cdn.net` ile sınırlıdır. Yeni bir CDN kullanılırsa otomatik olarak güvenilmez; host listesi incelenerek güncellenmelidir. Kaynaklar HTTPS kullanmalı ve DNS sonucu genel ağ adresi olmalıdır.
+
+Testler (depo kökünden):
+
+```powershell
+dotnet test apps/server/IPTVAPI.sln
+# İsteğe bağlı canlı test; ikinci test PATH üzerinde ffmpeg gerektirir:
+$env:SHORTIZLE_LIVE_TEST = '1'
+dotnet test apps/server/Shortizle.Tests/Shortizle.Tests.csproj --filter FullyQualifiedName~Live
+```
+
+Canlı testler anonim kaynak çözümleme, master/alt playlist/medya erişimi ve gerçek HTTP endpoint’inden ffmpeg ile video karesi çözmeyi kontrol eder. Gateway segmentleri uzantısız olabildiğinden ffmpeg testinde `allowed_extensions=ALL`, `allowed_segment_extensions=ALL`, `extension_picky=0` kullanılır; bu seçenekler API’nin upstream host ve ağ doğrulamasını değiştirmez. Canlı sonuçlar kaynak erişimine göre değişebilir. Tarayıcı player’ında görsel oynatma ayrıca doğrulanmalıdır.
+
 # TRT 1
 https://trt.daioncdn.net/trt-1/master.m3u8?app=web
 

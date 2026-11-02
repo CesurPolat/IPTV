@@ -1,4 +1,77 @@
-<div class="series-page" *ngIf="!isLoading && seriesData">
+<section class="catalog-tools" *ngIf="!seriesUrl">
+  <div class="filter-heading"><div><span class="filter-eyebrow">SANA GÖRE BİR DİZİ</span><h2>Ne izlemek istersin?</h2></div>
+    <p><kbd>↑ ↓ ← →</kbd> Gezin <kbd>Enter</kbd> Seç <kbd>Geri</kbd> Kapat</p>
+  </div>
+  <form class="filter-grid" (ngSubmit)="searchArchive()" (keydown)="handleFilterKey($event)" (focusin)="rememberFilterFocus()" aria-label="Dizi arama filtreleri">
+    <label class="query-field">Dizi adı<input #filterControl name="q" [(ngModel)]="archiveQuery.q" maxlength="200" placeholder="Bir dizi adı yaz...">
+      <span>Enter ile ara · ↓ Filtrelere geç</span>
+    </label>
+    <app-series-filter #filterControl label="Türler" [options]="filterOptions.genres" [multiple]="true"
+      [selectedValues]="archiveQuery.genres" (selectionChange)="archiveQuery.genres = $event" />
+    <app-series-filter #filterControl label="Platform" [options]="[{value: '', label: 'Tümü'}].concat(filterOptions.platforms)"
+      [selectedValues]="[archiveQuery.platform]" (selectionChange)="archiveQuery.platform = $event[0] || ''" />
+    <app-series-filter #filterControl label="Ses / Dil" [options]="[{value: '', label: 'Tümü'}, {value: 'dublaj', label: 'Dublajlı'}, {value: 'altyazi', label: 'Altyazılı'}]"
+      [selectedValues]="[archiveQuery.kind]" (selectionChange)="archiveQuery.kind = $event[0] || ''" />
+    <app-series-filter #filterControl label="Sıralama" [options]="[{value: 'popular', label: 'En çok izlenen'}, {value: 'new', label: 'En yeni'}, {value: 'rating', label: 'En yüksek puan'}]"
+      [selectedValues]="[archiveQuery.sort]" (selectionChange)="archiveQuery.sort = $event[0] || 'popular'" />
+    <app-series-filter #filterControl label="Görünüm" [options]="[{value: 'grid', label: 'Izgara'}, {value: 'list', label: 'Liste'}]"
+      [selectedValues]="[archiveQuery.view]" (selectionChange)="archiveQuery.view = $event[0] || 'grid'" />
+    <div class="filter-actions">
+      <button #filterControl class="apply-filters" type="submit" [disabled]="isLoading">Dizileri göster <span aria-hidden="true">→</span></button>
+      <button #filterControl class="reset-filters" type="button" (click)="resetArchive()" [disabled]="isLoading">Koleksiyonlara dön</button>
+    </div>
+  </form>
+</section>
+
+<section class="catalog-page" *ngIf="!seriesUrl && !archiveMode && !isLoading && !error && catalog">
+  <header><h1>{{catalog.heading}}</h1><p>Shortizle dizilerini keşfet</p></header>
+  <section class="collection" *ngFor="let collection of catalog.collections; let row = index">
+    <h2>{{collection.title}}</h2>
+    <div class="collection-items">
+      <a class="catalog-card" *ngFor="let title of collection.items; let col = index" #catalogCard
+         [routerLink]="['/series']" [queryParams]="{url: title.url}"
+         [class.active]="activeCollectionIndex === row && activeTitleIndex === col"
+         (focus)="activeCollectionIndex = row; activeTitleIndex = col">
+        <img *ngIf="title.posterUrl; else noPoster" [src]="title.posterUrl" [alt]="title.name" loading="lazy">
+        <ng-template #noPoster><div class="poster-placeholder">{{title.name}}</div></ng-template>
+        <div class="catalog-card-info">
+          <h3>{{title.name}}</h3>
+          <p>{{title.episodeCount}} bölüm <span *ngIf="title.isAdult"> · 18+</span></p>
+          <p class="languages"><span *ngIf="title.hasDublaj">Dublaj</span><span *ngIf="title.hasAltyazi">Altyazı</span></p>
+        </div>
+      </a>
+    </div>
+  </section>
+  <p *ngIf="!catalog.collections.length">Şu anda gösterilecek dizi bulunmuyor.</p>
+</section>
+
+<section class="catalog-page" *ngIf="!seriesUrl && archiveMode && !isLoading && !error && archiveResult">
+  <header><h1>Dizi arama</h1><p>{{archiveResult.total}} sonuç · Sayfa {{archiveResult.page}} / {{archiveResult.lastPage}}</p></header>
+  <div class="archive-results" [class.list-view]="archiveQuery.view === 'list'">
+    <a class="catalog-card" *ngFor="let title of archiveResult.items; let col = index" #catalogCard
+       [routerLink]="['/series']" [queryParams]="{url: title.url}" [class.active]="activeTitleIndex === col"
+       (focus)="activeTitleIndex = col">
+      <img *ngIf="title.posterUrl; else archiveNoPoster" [src]="title.posterUrl" [alt]="title.name" loading="lazy">
+      <ng-template #archiveNoPoster><div class="poster-placeholder">{{title.name}}</div></ng-template>
+      <div class="catalog-card-info"><h3>{{title.name}}</h3><p>{{title.episodeCount}} bölüm <span *ngIf="title.isAdult"> · 18+</span></p>
+        <p class="languages"><span *ngIf="title.hasDublaj">Dublaj</span><span *ngIf="title.hasAltyazi">Altyazı</span></p>
+        <p *ngIf="archiveQuery.view === 'list'">{{title.description}}</p>
+      </div>
+    </a>
+  </div>
+  <p *ngIf="!archiveResult.items.length" role="status">Bu filtrelerle dizi bulunamadı.</p>
+  <nav class="archive-pagination" aria-label="Arama sayfaları">
+    <button (click)="searchArchive(archiveResult.page - 1)" [disabled]="archiveResult.page <= 1">Önceki</button>
+    <span>{{archiveResult.page}} / {{archiveResult.lastPage}}</span>
+    <button (click)="searchArchive(archiveResult.page + 1)" [disabled]="archiveResult.page >= archiveResult.lastPage">Sonraki</button>
+  </nav>
+</section>
+
+<div class="catalog-error" *ngIf="!isLoading && error" role="alert">
+  <p>{{error}}</p><button #resultsAction (click)="retry()">Tekrar dene</button>
+</div>
+
+<div class="series-page" *ngIf="!isLoading && !error && seriesData">
   <div class="backdrop" [style.backgroundImage]="'url(' + seriesData.image + ')'">
     <div class="overlay"></div>
   </div>
@@ -9,6 +82,7 @@
         <img [src]="seriesData.image" [alt]="seriesData.name">
       </div> -->
       <div class="info">
+        <button type="button" class="catalog-back" (click)="goBack()">← Geri</button>
         <h1>{{seriesData.name}}</h1>
         <p class="description">{{seriesData.description}}</p>
       </div>
@@ -24,6 +98,8 @@
         {{season.name}}
       </div>
     </div>
+
+    <p *ngIf="playbackError" role="alert">{{playbackError}}</p>
 
     <div class="episodes-grid">
       <div class="episode-card" 
@@ -41,10 +117,11 @@
         </div>
       </div>
     </div>
+    <p *ngIf="!selectedSeason?.episodes?.length">Henüz yayınlanmış bölüm bulunmuyor.</p>
   </div>
 </div>
 
 <div class="loading" *ngIf="isLoading">
   <div class="spinner"></div>
-  <p>Dizi detayları yükleniyor...</p>
+  <p>{{seriesUrl ? 'Dizi detayları yükleniyor...' : archiveMode ? 'Diziler aranıyor...' : 'Koleksiyonlar yükleniyor...'}}</p>
 </div>

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink, Router } from '@angular/router';
 import { TvChannelsService, Channel } from '../../services/tv-channels.service';
 import { NavigationService } from '../../services/navigation.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-search',
@@ -19,6 +20,8 @@ export class SearchComponent implements OnInit, OnDestroy {
   activeIndex: number = 0;
   activeSection: 'search_bar' | 'results' = 'results';
   columns: number = 0;
+  private routeSubscription?: Subscription;
+  private searchVersion = 0;
 
   constructor(
     private route: ActivatedRoute,
@@ -32,15 +35,21 @@ export class SearchComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.route.queryParams.subscribe(params => {
+    this.routeSubscription = this.route.queryParams.subscribe(params => {
       this.query = params['q'] || '';
       if (this.query) {
         this.performSearch();
+      } else {
+        this.searchVersion++;
+        this.results = [];
+        this.isLoading = false;
       }
     });
   }
 
   ngOnDestroy() {
+    this.routeSubscription?.unsubscribe();
+    this.searchVersion++;
     this.navService.setSearchSelected(false);
   }
 
@@ -117,7 +126,7 @@ export class SearchComponent implements OnInit, OnDestroy {
         if (this.activeSection === 'results' && this.results.length > 0) {
           const item = this.results[this.activeIndex];
           this.router.navigate([item.category === 'Series' ? '/series' : '/player'], { 
-            queryParams: { url: item.source.split('/')[1] } 
+            queryParams: { url: item.source }
           });
         }
         break;
@@ -138,6 +147,7 @@ export class SearchComponent implements OnInit, OnDestroy {
   }
 
   async performSearch() {
+    const version = ++this.searchVersion;
     this.isLoading = true;
     this.activeIndex = 0;
     
@@ -148,12 +158,14 @@ export class SearchComponent implements OnInit, OnDestroy {
     }
 
     try {
-      this.results = await this.tvChannelsService.searchContent(this.query);
+      const results = await this.tvChannelsService.searchContent(this.query);
+      if (version !== this.searchVersion) return;
+      this.results = results;
       setTimeout(() => this.calculateColumns(), 100);
     } catch (error) {
       console.error('Search error:', error);
     } finally {
-      this.isLoading = false;
+      if (version === this.searchVersion) this.isLoading = false;
     }
   }
 }

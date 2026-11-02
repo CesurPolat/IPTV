@@ -5,6 +5,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Router } from '@angular/router';
 import { AppUpdateService } from './services/app-update.service';
 import { NotificationService } from './services/notification.service';
+import { NavigationService } from './services/navigation.service';
 /* import { NodeJS } from 'capacitor-nodejs'; */
 
 @Component({
@@ -22,7 +23,8 @@ export class AppComponent {
   constructor(
     private router: Router,
     private appUpdateService: AppUpdateService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private navigationService: NavigationService
   ) {
 
     this.setupBackButtonListener();
@@ -67,8 +69,7 @@ export class AppComponent {
       }
 
       if (this.router.url !== '/home') {
-        //this.router.navigate(['/home']);
-        window.location.href = 'index.html';
+        this.navigationService.back();
       } else {
         CapacitorApp.exitApp();
       }

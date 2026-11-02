@@ -18,6 +18,10 @@ namespace Infrastructure
             services.AddTransient<IBroadcastScheduleService, BroadcastScheduleService>();
             services.AddKeyedTransient<IStreamingService, DizipalService>("Dizipal");
             services.AddKeyedTransient<IStreamingService, RoketdiziService>("Roketdizi");
+            services.AddSingleton<Infrastructure.Services.Streaming.Shortizle.ShortizleService>();
+            services.AddSingleton<IShortizleResolver>(sp => sp.GetRequiredService<Infrastructure.Services.Streaming.Shortizle.ShortizleService>());
+            services.AddSingleton<IShortizlePlayback>(sp => sp.GetRequiredService<Infrastructure.Services.Streaming.Shortizle.ShortizleService>());
+            services.AddSingleton<IShortizleCatalog, Infrastructure.Services.Streaming.Shortizle.ShortizleCatalogService>();
             services.AddSingleton<LocalDiskRecordingStorageService>();
             services.AddSingleton<GoogleDriveRecordingStorageService>(provider =>
             {

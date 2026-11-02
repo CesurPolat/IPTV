@@ -1,0 +1,22 @@
+<button #trigger type="button" class="filter-trigger" [class.has-selection]="selectedValues.length && selectedValues[0] !== ''"
+        aria-haspopup="dialog" [attr.aria-expanded]="isOpen" [attr.aria-controls]="isOpen ? menuId : null" (click)="open()">
+  <span class="filter-label">{{label}}</span><span class="filter-value">{{summary}} <span aria-hidden="true">⌄</span></span>
+</button>
+<div class="filter-backdrop" *ngIf="isOpen" (click)="close()">
+  <section class="filter-dialog" role="dialog" aria-modal="true" [id]="menuId" [attr.aria-label]="label" (click)="$event.stopPropagation()">
+    <header><span class="eyebrow">FİLTRE SEÇİMİ</span><h2>{{label}}</h2>
+      <p>{{multiple ? 'Enter ile birden fazla seçenek işaretleyebilirsin.' : 'Ok tuşlarıyla gezin, Enter ile seç.'}}</p>
+    </header>
+    <div class="filter-options" role="group" [attr.aria-label]="label + ' seçenekleri'">
+      <button #menuItem type="button" *ngFor="let option of options" class="filter-option" [class.selected]="selected(option.value)"
+              [attr.aria-pressed]="selected(option.value)" (click)="choose(option.value)">
+        <span>{{option.label}}</span><span class="selection-mark" aria-hidden="true">{{selected(option.value) ? '✓' : ''}}</span>
+      </button>
+      <p *ngIf="!options.length">Henüz seçenek bulunmuyor.</p>
+    </div>
+    <footer><button #menuItem type="button" (click)="clear()">Seçimi temizle</button>
+      <button #menuItem type="button" class="done" (click)="close()">Tamam</button>
+    </footer>
+    <p class="key-help">↑ ↓ Gezin · Enter Seç · Geri Kapat</p>
+  </section>
+</div>

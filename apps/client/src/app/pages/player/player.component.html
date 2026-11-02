@@ -5,6 +5,14 @@
         </video>
     </div>
 
+    <div class="next-episode-status" *ngIf="nextEpisodeLoading || nextEpisodeError" aria-live="polite">
+        <p *ngIf="nextEpisodeLoading">Sonraki bölüm açılıyor...</p>
+        <div *ngIf="nextEpisodeError" role="alert">
+            <p>{{nextEpisodeError}}</p>
+            <button type="button" (click)="playNextEpisode()">Tekrar dene</button>
+        </div>
+    </div>
+
     <div class="custom-controls" [class.hidden]="!showControls">
         <button class="play-pause-btn" (click)="togglePlay()" tabindex="-1">
             @if (!isPlaying) {

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable, of, tap, map, switchMap, firstValueFrom } from 'rxjs';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, of, tap, map, switchMap, firstValueFrom, timeout } from 'rxjs';
 import { NotificationService } from './notification.service';
 import { environment } from '../../environments/environment';
 
@@ -23,6 +23,42 @@ export interface DizipalEpisode {
   url: string;
   episodeNumber: number;
   description?: string;
+}
+
+export interface ShortizleTitle {
+  id: string;
+  slug: string;
+  name: string;
+  url: string;
+  posterUrl: string | null;
+  description: string | null;
+  episodeCount: number;
+  hasDublaj: boolean;
+  hasAltyazi: boolean;
+  isAdult: boolean;
+}
+
+export interface ShortizleCollection {
+  key: string;
+  title: string;
+  items: ShortizleTitle[];
+}
+
+export interface ShortizleCatalog {
+  heading: string;
+  collections: ShortizleCollection[];
+  options?: ShortizleSearchOptions;
+}
+
+export interface ShortizleSearchOptions {
+  genres: { value: string; label: string }[];
+  platforms: { value: string; label: string }[];
+}
+export interface ShortizleSearchQuery {
+  q: string; genres: string[]; platform: string; kind: string; sort: string; view: string; page: number;
+}
+export interface ShortizleSearchResult {
+  items: ShortizleTitle[]; page: number; lastPage: number; perPage: number; total: number; options: ShortizleSearchOptions;
 }
 
 export interface DizipalSeason {
@@ -212,19 +248,23 @@ export class TvChannelsService {
     if (!searchTerm || searchTerm.length < 2) return [];
 
     try {
-      const results = await firstValueFrom(
-        this.http.get<any[]>(`${TvChannelsService.baseUrl}/streaming/Search?searchTerm=${encodeURIComponent(searchTerm)}`)
-      );
-
-      return (results || []).map((item: any) => ({
-        id: item.object_id.toString(),
-        name: item.object_name,
-        poster: item.object_poster_url,
-        // Slug'ı source olarak kullanıyoruz, player component'inde işlenmesi gerekebilir
-        source: item.used_slug,
-        category: item.used_type,
-        originalIndex: -1 // API'den gelenler için işaret
-      }));
+      const [legacy, shortizle] = await Promise.allSettled([
+        firstValueFrom(this.http.get<any[]>(`${TvChannelsService.baseUrl}/streaming/Search?searchTerm=${encodeURIComponent(searchTerm)}`).pipe(timeout(15000))),
+        this.searchShortizle({ q: searchTerm, genres: [], platform: '', kind: 'dublaj', sort: 'popular', view: 'grid', page: 1 })
+      ]);
+      if (legacy.status === 'rejected' && shortizle.status === 'rejected') throw shortizle.reason;
+      const results: Channel[] = legacy.status === 'fulfilled' ? (legacy.value || []).map((item: any) => ({
+        id: String(item.object_id ?? item.provider_results?.[0]?.id ?? item.name ?? ''),
+        name: item.object_name ?? item.name ?? '',
+        poster: item.object_poster_url ?? item.poster_url ?? '',
+        source: item.used_slug ?? item.provider_results?.[0]?.slug ?? '',
+        category: /series/i.test(item.used_type ?? item.type ?? '') ? 'Series' : (item.used_type ?? item.type ?? ''),
+        originalIndex: -1
+      })).filter((item: Channel) => !!item.source) : [];
+      if (shortizle.status === 'fulfilled') results.push(...shortizle.value.items.map(item => ({
+        id: `shortizle:${item.id}`, name: item.name, poster: item.posterUrl || '', source: item.url, category: 'Series', originalIndex: -1
+      })));
+      return results;
     } catch (error) {
       console.error('Search content error:', error);
       this.notificationService.showError('İçerik aranırken bir hata oluştu: ' + error);
@@ -232,21 +272,38 @@ export class TvChannelsService {
     }
   }
 
+  async getShortizleCollections(): Promise<ShortizleCatalog> {
+    return firstValueFrom(this.http.get<ShortizleCatalog>(`${TvChannelsService.baseUrl}/Streaming/Shortizle/collections`));
+  }
+
+  async searchShortizle(query: ShortizleSearchQuery): Promise<ShortizleSearchResult> {
+    let params = new HttpParams().set('q', query.q).set('platform', query.platform).set('kind', query.kind)
+      .set('sort', query.sort).set('view', query.view).set('page', query.page);
+    for (const genre of query.genres) params = params.append('genres[]', genre);
+    return firstValueFrom(this.http.get<ShortizleSearchResult>(`${TvChannelsService.baseUrl}/Streaming/Shortizle/search`, { params }));
+  }
+
   async getSeriesDetails(seriesId: string): Promise<DizipalSeriesDetail | null> {
     if (!seriesId) return null;
 
     try {
-      const result = await firstValueFrom(
-        this.http.get<DizipalSeriesDetail>(`${TvChannelsService.baseUrl}/Streaming/GetSeriesDetail?seriesId=${encodeURIComponent(seriesId)}`)
-      );
+      let detailUrl = `${TvChannelsService.baseUrl}/Streaming/GetSeriesDetail?seriesId=${encodeURIComponent(seriesId)}`;
+      try {
+        const parsed = new URL(seriesId);
+        const match = parsed.pathname.match(/^\/icerik\/([a-zA-Z0-9_-]+)\/?$/);
+        if (parsed.protocol === 'https:' && parsed.hostname === 'shortizle.com' && match) {
+          detailUrl = `${TvChannelsService.baseUrl}/Streaming/Shortizle/series/${encodeURIComponent(match[1])}`;
+        }
+      } catch { /* Existing providers also use non-URL series IDs. */ }
+      const result = await firstValueFrom(this.http.get<DizipalSeriesDetail>(detailUrl));
       
       if (result && result.image) {
         result.image = result.image.replace('f/f', '1920/1080');
       }
 
-      const seasons = Array.isArray(result.containsSeason) ? result.containsSeason : [result.containsSeason];
+      const seasons = Array.isArray(result.containsSeason) ? result.containsSeason : result.containsSeason ? [result.containsSeason] : [];
       seasons.forEach((season: DizipalSeason) => {
-        const episodes = Array.isArray(season.episode) ? season.episode : [season.episode];
+        const episodes = Array.isArray(season.episode) ? season.episode : season.episode ? [season.episode] : [];
         episodes.forEach(episode => {
           if (episode && episode.url) {
             episode.url = `${TvChannelsService.baseUrl}/Streaming/GetMediaUrl?url=${encodeURIComponent(episode.url)}`;
@@ -263,13 +320,12 @@ export class TvChannelsService {
   }
 
   async getVideoUrl(proxyUrl: string): Promise<string> {
-    try {
-      const response = await fetch(proxyUrl);
-      return response.text();
-    } catch (error) {
-      console.error('Get video URL error:', error);
-      return proxyUrl;
+    const response = await fetch(proxyUrl);
+    if (!response.ok) {
+      const problem = await response.json().catch(() => null);
+      throw new Error(problem?.detail || 'Video kaynağı alınamadı.');
     }
+    return response.text();
   }
 
 }

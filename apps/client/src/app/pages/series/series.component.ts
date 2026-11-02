@@ -1,8 +1,11 @@
 import { Component, OnInit, OnDestroy, HostListener, ViewChildren, QueryList, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { TvChannelsService, DizipalSeriesDetail, DizipalSeason, DizipalEpisode } from '../../services/tv-channels.service';
+import { TvChannelsService, DizipalSeriesDetail, DizipalSeason, DizipalEpisode, ShortizleCatalog, ShortizleSearchQuery, ShortizleSearchResult, ShortizleSearchOptions } from '../../services/tv-channels.service';
 import { NavigationService } from '../../services/navigation.service';
+import { Subscription } from 'rxjs';
+import { SeriesFilterComponent } from './series-filter.component';
 
 interface Episode {
   id: string;
@@ -20,13 +23,29 @@ interface Season {
 @Component({
   selector: 'app-series',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, FormsModule, SeriesFilterComponent],
   templateUrl: './series.component.html',
   styleUrl: './series.component.scss'
 })
 export class SeriesComponent implements OnInit, OnDestroy {
   @ViewChildren('episodeCard') episodeCards!: QueryList<ElementRef>;
   @ViewChildren('seasonTab') seasonTabs!: QueryList<ElementRef>;
+  @ViewChildren('catalogCard') catalogCards!: QueryList<ElementRef>;
+  @ViewChildren('filterControl', { read: ElementRef }) filterControls!: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren(SeriesFilterComponent) filterMenus!: QueryList<SeriesFilterComponent>;
+  @ViewChildren('resultsAction') resultsActions!: QueryList<ElementRef<HTMLButtonElement>>;
+  private lastFilterIndex = 0;
+  catalog: ShortizleCatalog | null = null;
+  archiveMode = false;
+  archiveResult: ShortizleSearchResult | null = null;
+  archiveQuery: ShortizleSearchQuery = { q: '', genres: [], platform: '', kind: 'dublaj', sort: 'popular', view: 'grid', page: 1 };
+  filterOptions: ShortizleSearchOptions = { genres: [], platforms: [] };
+  error = '';
+  playbackError = '';
+  activeCollectionIndex = 0;
+  activeTitleIndex = 0;
+  private routeSubscription?: Subscription;
+  private loadVersion = 0;
 
   seriesUrl: string = '';
   seriesData: DizipalSeriesDetail | null = null;
@@ -47,20 +66,82 @@ export class SeriesComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    this.route.queryParams.subscribe(params => {
+    this.routeSubscription = this.route.queryParams.subscribe(params => {
       this.seriesUrl = params['url'] || '';
+      this.archiveMode = params['collections'] !== '1';
+      this.seriesData = null;
+      this.playbackError = '';
+      this.seasons = [];
+      this.selectedSeason = null;
+      this.filterMenus?.forEach(menu => { menu.isOpen = false; });
       if (this.seriesUrl) {
         this.fetchSeriesDetails();
+      } else if (this.archiveMode) {
+        this.archiveQuery = { q: params['q'] || '', genres: params['genres'] ? [params['genres']].flat() : [],
+          platform: params['platform'] || '', kind: params['kind'] ?? 'dublaj', sort: params['sort'] || 'popular',
+          view: params['view'] || 'grid', page: Number(params['page']) || 1 };
+        this.fetchArchive();
+      } else {
+        this.archiveQuery = { q: '', genres: [], platform: '', kind: 'dublaj', sort: 'popular', view: 'grid', page: 1 };
+        this.fetchCatalog();
       }
     });
   }
 
-  ngOnDestroy() {}
+  ngOnDestroy() { this.routeSubscription?.unsubscribe(); this.loadVersion++; }
+
+  goBack() {
+    this.navService.back(this.seriesUrl || this.archiveMode ? '/series' : '/home');
+  }
+
+  async fetchCatalog() {
+    const version = ++this.loadVersion;
+    this.isLoading = true;
+    this.error = '';
+    try {
+      const catalog = await this.tvChannelsService.getShortizleCollections();
+      if (version !== this.loadVersion) return;
+      this.catalog = catalog;
+      this.filterOptions = catalog.options || this.filterOptions;
+      this.activeCollectionIndex = 0;
+      this.activeTitleIndex = 0;
+    } catch {
+      if (version === this.loadVersion) this.error = 'Koleksiyonlar yüklenemedi. Lütfen tekrar deneyin.';
+    } finally {
+      if (version === this.loadVersion) this.isLoading = false;
+    }
+  }
+
+  retry() { this.seriesUrl ? this.fetchSeriesDetails() : this.archiveMode ? this.fetchArchive() : this.fetchCatalog(); }
+
+  searchArchive(page = 1) {
+    this.router.navigate(['/series'], { queryParams: { archive: '1', ...this.archiveQuery, page } });
+  }
+
+  resetArchive() { this.router.navigate(['/series'], { queryParams: { collections: '1' } }); }
+
+  async fetchArchive() {
+    const version = ++this.loadVersion;
+    this.isLoading = true;
+    this.error = '';
+    try {
+      const result = await this.tvChannelsService.searchShortizle(this.archiveQuery);
+      if (version !== this.loadVersion) return;
+      this.archiveResult = result;
+      this.filterOptions = result.options;
+      this.activeTitleIndex = this.activeCollectionIndex = 0;
+    } catch {
+      if (version === this.loadVersion) this.error = 'Dizi araması yapılamadı. Lütfen tekrar deneyin.';
+    } finally { if (version === this.loadVersion) this.isLoading = false; }
+  }
 
   async fetchSeriesDetails() {
+    const version = ++this.loadVersion;
     this.isLoading = true;
+    this.error = '';
     try {
       const result = await this.tvChannelsService.getSeriesDetails(this.seriesUrl);
+      if (version !== this.loadVersion) return;
       if (result) {
         this.seriesData = result;
         
@@ -92,10 +173,12 @@ export class SeriesComponent implements OnInit, OnDestroy {
           this.activeSection = 'seasons';
           this.activeSeasonIndex = 0;
         }
-      }
+      } else this.error = 'Dizi detayları yüklenemedi. Lütfen tekrar deneyin.';
       this.isLoading = false;
     } catch (error) {
+      if (version !== this.loadVersion) return;
       console.error('Error fetching series details:', error);
+      this.error = 'Dizi detayları yüklenemedi. Lütfen tekrar deneyin.';
       this.isLoading = false;
     }
   }
@@ -107,16 +190,19 @@ export class SeriesComponent implements OnInit, OnDestroy {
   }
 
   async playEpisode(episode: Episode, index: number) {
+    this.playbackError = '';
     this.activeEpisodeIndex = index;
     this.activeSection = 'episodes';
     
     try {
       this.isLoading = true;
       const mediaUrl = await this.tvChannelsService.getVideoUrl(episode.source);
-      this.router.navigate(['/player'], { queryParams: { url: mediaUrl } });
+      this.router.navigate(['/player'], { queryParams: {
+        url: mediaUrl, series: this.seriesUrl, season: this.selectedSeason?.id, episode: episode.id
+      } });
     } catch (error) {
       console.error('Error playing episode:', error);
-      this.router.navigate(['/player'], { queryParams: { url: episode.source } });
+      this.playbackError = error instanceof Error ? error.message : 'Bölüm oynatılamadı. Lütfen tekrar deneyin.';
     } finally {
       this.isLoading = false;
     }
@@ -124,6 +210,18 @@ export class SeriesComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
+    const openMenu = this.filterMenus?.find(menu => menu.isOpen);
+    if (openMenu) { openMenu.handleKey(event); return; }
+    if (event.defaultPrevented) return;
+    if (event.key === 'Backspace' || event.key === 'Escape') {
+      if (event.key === 'Backspace' && (event.target as HTMLElement | null)?.closest?.('input, textarea, [contenteditable="true"]')) return;
+      event.preventDefault();
+      this.goBack();
+      return;
+    }
+    if ((event.target as HTMLElement | null)?.closest?.('form, input, select, textarea, button')) return;
+    if (this.isLoading || this.error) return;
+    if (!this.seriesUrl) { this.handleCatalogKey(event); return; }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
     }
@@ -181,12 +279,86 @@ export class SeriesComponent implements OnInit, OnDestroy {
           this.activeEpisodeIndex = 0;
         }
         break;
-      case 'Backspace':
-      case 'Escape':
-        this.router.navigate(['/search']);
-        break;
     }
     this.scrollToActive();
+  }
+
+  private handleCatalogKey(event: KeyboardEvent) {
+    const collections = this.archiveMode ? [{ items: this.archiveResult?.items || [] }] : this.catalog?.collections || [];
+    if (!collections.length) return;
+    if (!collections[this.activeCollectionIndex]?.items.length) return;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) event.preventDefault();
+    switch (event.key) {
+      case 'ArrowRight': this.activeTitleIndex = Math.min(this.activeTitleIndex + 1, collections[this.activeCollectionIndex].items.length - 1); break;
+      case 'ArrowLeft': this.activeTitleIndex = Math.max(0, this.activeTitleIndex - 1); break;
+      case 'ArrowDown':
+        if (this.archiveMode) this.activeTitleIndex = Math.min(this.activeTitleIndex + this.archiveColumns(), collections[0].items.length - 1);
+        else this.activeCollectionIndex = Math.min(this.activeCollectionIndex + 1, collections.length - 1);
+        break;
+      case 'ArrowUp':
+        if ((this.archiveMode && this.activeTitleIndex < this.archiveColumns()) || (!this.archiveMode && this.activeCollectionIndex === 0)) {
+          this.focusFilter(this.lastFilterIndex); return;
+        }
+        if (this.archiveMode) this.activeTitleIndex = Math.max(0, this.activeTitleIndex - this.archiveColumns());
+        else this.activeCollectionIndex = Math.max(0, this.activeCollectionIndex - 1);
+        break;
+      case 'Enter':
+        this.router.navigate(['/series'], { queryParams: { url: collections[this.activeCollectionIndex].items[this.activeTitleIndex].url } });
+        return;
+      default: return;
+    }
+    this.activeTitleIndex = Math.min(this.activeTitleIndex, collections[this.activeCollectionIndex].items.length - 1);
+    const offset = collections.slice(0, this.activeCollectionIndex).reduce((sum, row) => sum + row.items.length, 0);
+    this.catalogCards.toArray()[offset + this.activeTitleIndex]?.nativeElement.focus({ preventScroll: true });
+    this.catalogCards.toArray()[offset + this.activeTitleIndex]?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+
+  private controls(): HTMLElement[] {
+    return this.filterControls?.toArray().map(ref => ref.nativeElement.matches('input, button')
+      ? ref.nativeElement : ref.nativeElement.querySelector<HTMLElement>('button')!)
+      .filter(element => !!element && !(element as HTMLButtonElement).disabled) || [];
+  }
+
+  rememberFilterFocus() {
+    const index = this.controls().findIndex(element => element === document.activeElement);
+    if (index >= 0) this.lastFilterIndex = index;
+  }
+
+  private focusFilter(index: number) {
+    const controls = this.controls();
+    const target = controls[Math.min(index, controls.length - 1)];
+    target?.focus(); target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  handleFilterKey(event: KeyboardEvent) {
+    if (!event.key.startsWith('Arrow')) return;
+    const controls = this.controls();
+    const index = controls.findIndex(element => element === document.activeElement);
+    if (index < 0) return;
+    const current = controls[index];
+    if (current.tagName === 'INPUT' && ['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const rect = current.getBoundingClientRect();
+    const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+    const sign = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+    const candidates = controls.map((element, i) => {
+      const next = element.getBoundingClientRect();
+      const dx = (next.left + next.right - rect.left - rect.right) / 2;
+      const dy = (next.top + next.bottom - rect.top - rect.bottom) / 2;
+      const distance = (horizontal ? dx : dy) * sign;
+      return { i, distance, score: distance + Math.abs(horizontal ? dy : dx) * 3 };
+    }).filter(candidate => candidate.distance > 5).sort((a, b) => a.score - b.score);
+    if (candidates.length) this.focusFilter(candidates[0].i);
+    else if (event.key === 'ArrowDown') {
+      const target = this.catalogCards?.first?.nativeElement || this.resultsActions?.find(action => !action.nativeElement.disabled)?.nativeElement;
+      target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  private archiveColumns(): number {
+    const cards = this.catalogCards.toArray();
+    const top = cards[0]?.nativeElement.getBoundingClientRect().top;
+    return Math.max(1, cards.filter(card => Math.abs(card.nativeElement.getBoundingClientRect().top - top) < 10).length);
   }
 
   scrollToActive() {
