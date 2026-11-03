@@ -21,6 +21,15 @@ describe('Shortizle client integration', () => {
     expect((await result).heading).toBe('Koleksiyonlar');
   });
 
+  it('requests an alternative for the current session revision', async () => {
+    const session = 'a'.repeat(32);
+    const result = service.getAlternativeSource(`https://api.example/Streaming/Shortizle/${session}/master.m3u8?revision=2`);
+    const request = http.expectOne(r => r.url.endsWith(`/Streaming/Shortizle/${session}/failover`));
+    expect(request.request.method).toBe('POST'); expect(request.request.body).toEqual({ revision: 2 });
+    request.flush('https://api.example/next.m3u8?revision=3');
+    expect(await result).toContain('revision=3');
+  });
+
   it('sends archive filters and repeated genres without changing the search text', async () => {
     const result = service.searchShortizle({ q: 'selam & test', genres: ['aksiyon', 'aile'], platform: 'reelshort', kind: 'dublaj', sort: 'popular', view: 'list', page: 2 });
     const request = http.expectOne(r => r.url.endsWith('/Streaming/Shortizle/search'));

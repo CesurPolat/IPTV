@@ -28,6 +28,10 @@ Client’ta **Movies → `/series`** açılınca koleksiyonlar afişli gruplar o
 
 # Shortizle bölüm oynatma API’si
 
+Otomatik kaynak geçişi: başlangıçta bağlantı hatası veren veya geçerli manifest döndürmeyen alternatifler elenir; her aday için 20 saniyelik süre sınırı uygulanır. Player oynatma hatasında veya 20 saniyelik takılmada `POST /Streaming/Shortizle/{sessionId}/failover` çağırır. Gövde `{ "revision": 0 }` biçimindedir; ilk master için sürüm 0, sonraki sürüm master URL’sindeki `revision` parametresidir. Yanıt yeni `master.m3u8?revision=N` URL’sini düz metin olarak döndürür. Aynı sürümden gelen eşzamanlı/tekrarlı istekler bir kez kaynak değiştirir.
+
+Geçiş yalnızca aynı bölümün aynı kaynak/dil grubundaki henüz başarısız sayılmamış alternatiflerine yapılır; fragman ve başka dil grubuna geçilmez. Eski segment kimlikleri eski kaynağa bağlı kalır. Player yeni kaynağa geçerken oynatma saniyesini korur ve geçmişteki player adresini değiştirir; geri tuşu bölüm listesine döner. Kullanıcı duraklatmışken veya uygulama arka plandayken takılma nedeniyle kaynak değiştirilmez. Bölüm başına en fazla üç otomatik geçiş yapılır. Alternatifler biterse `502 sources_exhausted` gösterilir; bölüm listesinden yeniden açmak yeni oturum kurar. Giriş/abonelik reddi kaynak değiştirerek aşılmaz.
+
 Shortizle bölüm sayfasını URL-encode ederek mevcut endpoint’e verin:
 
 ```http
@@ -52,13 +56,17 @@ router.navigate(['/player'], { queryParams: { url: playbackUrl } });
 
 API anonim ve ayrı bir çerez oturumu kurar. Giriş/abonelik gerektiren içerik açılmaz. Manifest, alt playlist, segment, anahtar ve HLS altyazı adresleri API üzerinden aynı oturumla sunulur. Kaynak adresleri ve upstream çerezleri client’a verilmez. Mevcut Dizipal ve Roketdizi akışları korunur.
 
+Shortizle client oynatması, HEVC içeren TS ve ayrı ses/video playlistleri için HLS.js'in tam 1.6.16 sürümünü kullanır. Bu sürüm, sağlayıcının PKCS7 dolgusu içeren AES-128 başlangıç byte-range biçimiyle doğrulanmıştır; sürüm yükseltirken hem şifreli fMP4 hem HEVC TS kaynaklarını gerçek tarayıcıda yeniden doğrulayın. Cihazın HEVC çözme desteği yine gereklidir. Bağımlılık değişiminden sonra çalışan `ng serve` işlemini yeniden başlatın; önceden optimize edilen modül eski sürümü kullanabilir.
+
+Master URL'sindeki `revision`, o kaynak sürümüne sabittir; parametresiz URL ilk kaynağı gösterir. Başka bir geçiş isteği eski master URL'sini farklı kaynağa yönlendirmez. Eski sürümün upstream süresi dolarsa `410 source_expired` döner. Manuel seçimden sonra medya hataları seçimi değiştirmez.
+
 Oynatma oturumları 30 dakika hareketsizlikten sonra veya API yeniden başlatıldığında biter. Birden fazla API instance’ı kullanılıyorsa oynatma istekleri aynı instance’a yönlendirilmelidir. Oturum URL’leri erişim anahtarı gibi ele alınmalı ve paylaşılmamalıdır.
 
 Süre bilgisi olan kaynaklar, master yeniden istendiğinde süre bitimine 60 saniye kala aynı kaynak kimliğiyle yenilenir. Eski kaynak kimlikleri eski upstream adresini korur; süresi biten eski segmentler yeni kaynağa eşlenmez. Oynatıcı eski playlisti kullanmaya devam ederken upstream erişimi biterse `/GetMediaUrl` yeniden çağrılıp yeni master yüklenmelidir. API oturumu için `410 session_expired` da aynı şekilde ele alınır.
 
 Hatalar `application/problem+json` ve `code` alanı taşır: geçersiz adres `400`, giriş gereksinimi `401`, erişim reddi `403`, bulunamayan bölüm/kaynak `404`, bitmiş oturum `410`, upstream/geçersiz manifest/desteklenmeyen kaynak `502`, zaman aşımı `504`. HTTP 200 dönen HTML, HLS kabul edilmez. Upstream’de identity istenir; gzip/deflate/Brotli çözülür, zstd `502 unsupported_encoding` döndürür.
 
-İzinli upstream host’ları `shortizle.com`, `api.mybigdramapool.com`, `storage-pilot.shortizle.com`, `stream.shortizle.com` ve `short-depo-test.b-cdn.net` ile sınırlıdır. Yeni bir CDN kullanılırsa otomatik olarak güvenilmez; host listesi incelenerek güncellenmelidir. Kaynaklar HTTPS kullanmalı ve DNS sonucu genel ağ adresi olmalıdır.
+İzinli upstream host’ları `shortizle.com`, `api.mybigdramapool.com`, `media.mybigdramapool.com`, `storage-pilot.shortizle.com`, `stream.shortizle.com` ve `short-depo-test.b-cdn.net` ile sınırlıdır. Yeni bir CDN kullanılırsa otomatik olarak güvenilmez; host listesi incelenerek güncellenmelidir. Kaynaklar HTTPS kullanmalı ve DNS sonucu genel ağ adresi olmalıdır.
 
 Testler (depo kökünden):
 

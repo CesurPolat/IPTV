@@ -328,4 +328,19 @@ export class TvChannelsService {
     return response.text();
   }
 
+  async getAlternativeSource(playbackUrl: string, sourceNumber?: number): Promise<string> {
+    const url = new URL(playbackUrl, window.location.origin);
+    const match = url.pathname.match(/\/Streaming\/Shortizle\/([a-f0-9]{32})\/master\.m3u8$/i);
+    if (!match) throw new Error('Bu yayın için alternatif kaynak desteği yok.');
+    const revision = Number(url.searchParams.get('revision') || 0);
+    try {
+      return await firstValueFrom(this.http.post(`${TvChannelsService.baseUrl}/Streaming/Shortizle/${match[1]}/failover`,
+        { revision, ...(sourceNumber === undefined ? {} : { sourceNumber }) }, { responseType: 'text' }));
+    } catch (error: any) {
+      let problem = error?.error;
+      if (typeof problem === 'string') { try { problem = JSON.parse(problem); } catch { problem = null; } }
+      throw new Error(problem?.detail || 'Alternatif kaynak alınamadı. Bölümü yeniden açabilirsiniz.');
+    }
+  }
+
 }

@@ -40,6 +40,54 @@
 
     }
 
+    .source-number {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        flex-wrap: wrap;
+        max-width: calc(100% - 2rem);
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 9999;
+        padding: .5rem .75rem;
+        border: 1px solid rgba(255, 255, 255, .25);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, .75);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        transition: opacity .5s ease;
+
+        &.hidden { opacity: 0; pointer-events: none; }
+        &:focus-within {
+            opacity: 1;
+            pointer-events: auto;
+            outline: 3px solid #fff;
+            outline-offset: 3px;
+            background: rgba(36, 36, 36, .95);
+        }
+        small { display: none; font-size: 13px; color: #ddd; }
+        &:focus-within small { display: block; }
+
+        button {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: #fff;
+            font-size: 32px;
+            line-height: 1;
+            cursor: pointer;
+
+            &:hover { background: #3a3a3a; }
+            &:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+            &:disabled { opacity: .6; cursor: wait; }
+        }
+    }
+
     .custom-controls {
         position: absolute;
         bottom: 0;

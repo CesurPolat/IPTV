@@ -8,7 +8,7 @@ namespace Infrastructure.Services.Streaming.Shortizle;
 public static class ShortizleHttp
 {
     private static readonly HashSet<string> Hosts = new(StringComparer.OrdinalIgnoreCase)
-    { "shortizle.com", "storage-pilot.shortizle.com", "stream.shortizle.com", "api.mybigdramapool.com", "short-depo-test.b-cdn.net" };
+    { "shortizle.com", "storage-pilot.shortizle.com", "stream.shortizle.com", "api.mybigdramapool.com", "media.mybigdramapool.com", "short-depo-test.b-cdn.net" };
 
     public static void Validate(Uri uri)
     {

@@ -1,16 +1,27 @@
 <div class="video-container">
     <div class="video-wrapper">
         <video id="my-video" class="video-js vjs-default-skin" playsinline>
-            <source type="video/mp4">
         </video>
     </div>
 
-    <div class="next-episode-status" *ngIf="nextEpisodeLoading || nextEpisodeError" aria-live="polite">
+    <div class="next-episode-status" *ngIf="nextEpisodeLoading || nextEpisodeError || sourceLoading || sourceError" aria-live="polite">
+        <p *ngIf="sourceLoading">Başka bir kaynak deneniyor...</p>
+        <p *ngIf="sourceError" role="alert">{{sourceError}}</p>
         <p *ngIf="nextEpisodeLoading">Sonraki bölüm açılıyor...</p>
         <div *ngIf="nextEpisodeError" role="alert">
             <p>{{nextEpisodeError}}</p>
             <button type="button" (click)="playNextEpisode()">Tekrar dene</button>
         </div>
+    </div>
+
+    <div #sourceControl class="source-number" *ngIf="sourceNumber as number" [class.hidden]="!showControls"
+         tabindex="0" role="group" aria-label="Kaynak seçimi" aria-describedby="source-keyboard-hint" aria-live="polite" [attr.aria-busy]="sourceLoading">
+        <button type="button" class="source-arrow" aria-label="Önceki kaynak" (click)="changeSource(-1)"
+                [disabled]="sourceLoading || nextEpisodeLoading || number <= 1">‹</button>
+        <span>Kaynak {{number}}</span>
+        <button type="button" class="source-arrow" aria-label="Sonraki kaynak" (click)="changeSource(1)"
+                [disabled]="sourceLoading || nextEpisodeLoading">›</button>
+        <small id="source-keyboard-hint">← Önceki · → Sonraki · ↓ Videoya dön</small>
     </div>
 
     <div class="custom-controls" [class.hidden]="!showControls">

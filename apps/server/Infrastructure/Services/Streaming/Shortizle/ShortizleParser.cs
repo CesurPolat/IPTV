@@ -27,14 +27,24 @@ public static class ShortizleParser
     }
 
     public static IEnumerable<JsonObject> Sources(JsonObject props)
+        => Candidates(props).Select(candidate => candidate.Source);
+
+    public static IEnumerable<(JsonObject Source, string Group)> Candidates(JsonObject props)
     {
         foreach (var key in new[] { "externalSources", "sources" })
-            foreach (var source in Walk(props[key])) yield return source;
+        {
+            if (props[key] is JsonObject groups && groups.Any(pair => pair.Key is "dublaj" or "altyazi" or "fragman"))
+            {
+                foreach (var group in groups)
+                    foreach (var source in Walk(group.Value)) yield return (source, group.Key);
+            }
+            else foreach (var source in Walk(props[key])) yield return (source, "main");
+        }
         if (props["currentEpisode"] is JsonObject episode)
         {
-            foreach (var source in Walk(episode["sources"])) yield return source;
+            foreach (var source in Walk(episode["sources"])) yield return (source, "main");
             if (episode["video_url"] is JsonValue url && url.TryGetValue<string>(out var value) && !string.IsNullOrWhiteSpace(value))
-                yield return new JsonObject { ["url"] = value };
+                yield return (new JsonObject { ["url"] = value }, "main");
         }
     }
 

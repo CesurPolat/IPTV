@@ -10,20 +10,30 @@ namespace IPTVAPI.Controllers;
 [ShortizleErrors]
 public sealed class ShortizleController(IShortizlePlayback playback) : ControllerBase
 {
+    public sealed record FailoverRequest(int Revision, int? SourceNumber = null);
+
+    [HttpPost("failover")]
+    public async Task<IActionResult> Failover(string sessionId, [FromBody] FailoverRequest request, CancellationToken cancellationToken)
+    {
+        var revision = await playback.SwitchSourceAsync(sessionId, request.Revision, cancellationToken, request.SourceNumber);
+        Response.Headers.CacheControl = "no-store";
+        var selection = request.SourceNumber is int number ? $"&source={number}" : "";
+        return Content($"{PlaybackBase(Request)}/Streaming/Shortizle/{sessionId}/master.m3u8?revision={revision}{selection}", "text/plain");
+    }
     // APIUrl is initialized by the existing recorder startup path; it can be empty when recording is disabled.
     internal static string PlaybackBase(HttpRequest request) => string.IsNullOrWhiteSpace(ConfigHelper.APIUrl)
         ? $"{request.Scheme}://{request.Host}{request.PathBase}" : ConfigHelper.APIUrl.TrimEnd('/');
 
     [HttpGet("master.m3u8")]
-    public Task GetMaster(string sessionId) => Write(sessionId, null);
+    public Task GetMaster(string sessionId, [FromQuery] int? revision = null) => Write(sessionId, null, revision);
 
     [HttpGet("resource/{resourceId}")]
     public Task GetResource(string sessionId, string resourceId) => Write(sessionId, resourceId);
 
-    private async Task Write(string sessionId, string? resourceId)
+    private async Task Write(string sessionId, string? resourceId, int? revision = null)
     {
         using var resource = await playback.OpenAsync(sessionId, resourceId, Request.Headers.Range.FirstOrDefault(),
-            id => $"{PlaybackBase(Request)}/Streaming/Shortizle/{sessionId}/resource/{id}", HttpContext.RequestAborted);
+            id => $"{PlaybackBase(Request)}/Streaming/Shortizle/{sessionId}/resource/{id}", HttpContext.RequestAborted, revision);
         Response.StatusCode = resource.Status;
         Response.ContentType = resource.ContentType;
         Response.Headers.CacheControl = "no-store";

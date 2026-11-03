@@ -142,6 +142,122 @@ public sealed class ShortizleTests
     }
 
     [TestMethod]
+    public async Task InitialTransportFailureDoesNotPreventTryingTheNextSource()
+    {
+        using var service = new ShortizleService(() => Client(r =>
+        {
+            if (r.RequestUri!.Host == "shortizle.com") return Response(Page("[{\"url\":\"https://stream.shortizle.com/dead/master.m3u8\"},{\"url\":\"" + Master + "\"}]"));
+            if (r.RequestUri.AbsolutePath.StartsWith("/dead/")) throw new HttpRequestException("offline");
+            return Response("#EXTM3U\n#EXTINF:1,\nsegment.ts\n");
+        }));
+        var id = await service.ResolveAsync(Episode, default);
+        using var root = await service.OpenAsync(id, null, null, x => x, default);
+        Assert.AreEqual(200, root.Status);
+    }
+
+    [TestMethod]
+    public async Task ManualSelectionUsesExactSourceAndCanReturnToPreviousWithoutSkippingFailures()
+    {
+        var paths = new List<string>();
+        using var service = new ShortizleService(() => Client(r =>
+        {
+            paths.Add(r.RequestUri!.AbsolutePath);
+            if (r.RequestUri.Host == "shortizle.com") return Response(Page("[{\"id\":1,\"url\":\"https://stream.shortizle.com/a/master.m3u8\"},{\"id\":2,\"url\":\"https://stream.shortizle.com/dead/master.m3u8\"},{\"id\":3,\"url\":\"https://stream.shortizle.com/c/master.m3u8\"}]"));
+            if (r.RequestUri.AbsolutePath.StartsWith("/dead/")) return Response("Offline", status: HttpStatusCode.ServiceUnavailable);
+            return Response("#EXTM3U\n#EXT-X-ENDLIST\n");
+        }));
+        var id = await service.ResolveAsync(Episode, default);
+        try { await service.SwitchSourceAsync(id, 0, default, 2); Assert.Fail("Broken selection should fail"); }
+        catch (ShortizleException ex) { Assert.AreEqual(502, ex.Status); }
+        Assert.IsFalse(paths.Contains("/c/master.m3u8"));
+        Assert.AreEqual(1, await service.SwitchSourceAsync(id, 0, default, 3));
+        Assert.AreEqual(2, await service.SwitchSourceAsync(id, 1, default, 1));
+        Assert.AreEqual("/a/master.m3u8", paths.Last());
+        await Error("source_not_found", () => service.SwitchSourceAsync(id, 2, default, 4));
+    }
+
+    [TestMethod]
+    public async Task FailoverStaysInTheSameLanguageAndPinsOldResourceUrls()
+    {
+        var paths = new List<string>(); var pages = 0;
+        using var service = new ShortizleService(() => Client(r =>
+        {
+            paths.Add(r.RequestUri!.AbsolutePath);
+            if (r.RequestUri.Host == "shortizle.com")
+            {
+                pages++;
+                return Response(Page("{\"dublaj\":[{\"id\":1,\"url\":\"https://stream.shortizle.com/a/master.m3u8\"},{\"id\":2,\"url\":\"https://stream.shortizle.com/b/master.m3u8\"}],\"altyazi\":[{\"id\":3,\"url\":\"https://stream.shortizle.com/sub/master.m3u8\"}],\"fragman\":[{\"url\":\"https://stream.shortizle.com/trailer/master.m3u8\"}]}"));
+            }
+            return r.RequestUri.AbsolutePath.EndsWith("m3u8") ? Response("#EXTM3U\n#EXTINF:1,\nsegment.ts\n") : Response(r.RequestUri.AbsolutePath, "video/mp2t");
+        }));
+        var id = await service.ResolveAsync(Episode, default);
+        using var original = await service.OpenAsync(id, null, null, x => x, default);
+        var oldResource = (await new StreamReader(original.Body).ReadToEndAsync()).Split('\n')[2];
+        var revisions = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => service.SwitchSourceAsync(id, 0, default)));
+        Assert.IsTrue(revisions.All(revision => revision == 1)); Assert.AreEqual(2, pages);
+        using var switched = await service.OpenAsync(id, null, null, x => x, default, revision: 1);
+        var newResource = (await new StreamReader(switched.Body).ReadToEndAsync()).Split('\n')[2];
+        Assert.AreNotEqual(oldResource, newResource);
+        using var originalAgain = await service.OpenAsync(id, null, null, x => x, default);
+        Assert.AreEqual(oldResource, (await new StreamReader(originalAgain.Body).ReadToEndAsync()).Split('\n')[2]);
+        using var old = await service.OpenAsync(id, oldResource, null, x => x, default);
+        Assert.AreEqual("/a/segment.ts", await new StreamReader(old.Body).ReadToEndAsync());
+        using var current = await service.OpenAsync(id, newResource, null, x => x, default);
+        Assert.AreEqual("/b/segment.ts", await new StreamReader(current.Body).ReadToEndAsync());
+        await Error("sources_exhausted", () => service.SwitchSourceAsync(id, 1, default));
+        Assert.IsFalse(paths.Any(path => path.StartsWith("/sub/") || path.StartsWith("/trailer/")));
+    }
+
+    [TestMethod]
+    public async Task FailoverSkipsUnavailableAlternativesAndDoesNotBypassAuthorization()
+    {
+        var deny = false;
+        using var service = new ShortizleService(() => Client(r =>
+        {
+            if (r.RequestUri!.Host == "shortizle.com") return Response(Page("[{\"id\":1,\"url\":\"https://stream.shortizle.com/a/master.m3u8\"},{\"id\":2,\"url\":\"https://stream.shortizle.com/dead/master.m3u8\"},{\"id\":3,\"url\":\"https://stream.shortizle.com/c/master.m3u8\"}]"));
+            if (deny) return Response("Denied", status: HttpStatusCode.Forbidden);
+            if (r.RequestUri.AbsolutePath.StartsWith("/dead/")) return Response("Offline", status: HttpStatusCode.ServiceUnavailable);
+            return Response("#EXTM3U\n#EXT-X-ENDLIST\n");
+        }));
+        var id = await service.ResolveAsync(Episode, default);
+        Assert.AreEqual(1, await service.SwitchSourceAsync(id, 0, default));
+        await Error("invalid_revision", () => service.SwitchSourceAsync(id, 5, default));
+        var second = await service.ResolveAsync(Episode, default); deny = true;
+        await Error("access_denied", () => service.SwitchSourceAsync(second, 0, default));
+        await Error("session_expired", () => service.SwitchSourceAsync("missing", 0, default));
+    }
+
+    [TestMethod]
+    public async Task HttpFailoverReturnsANewMasterAndDeduplicatesTheSameRevision()
+    {
+        using var service = new ShortizleService(() => Client(r => r.RequestUri!.Host == "shortizle.com"
+            ? Response(Page("[{\"url\":\"https://stream.shortizle.com/a/master.m3u8\"},{\"url\":\"https://stream.shortizle.com/b/master.m3u8\"}]"))
+            : Response("#EXTM3U\n# upstream:" + r.RequestUri!.AbsolutePath + "\n#EXT-X-ENDLIST\n")));
+        var id = await service.ResolveAsync(Episode, default);
+        var builder = WebApplication.CreateBuilder(); builder.Logging.ClearProviders(); builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddControllers().AddApplicationPart(typeof(ShortizleController).Assembly);
+        builder.Services.AddSingleton<IShortizlePlayback>(service);
+        await using var app = builder.Build(); app.MapControllers(); await app.StartAsync();
+        var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        global::Application.Helpers.ConfigHelper.APIUrl = address + "/";
+        using var http = new HttpClient();
+        async Task<HttpResponseMessage> Switch(int revision) => await http.PostAsync(address + $"/Streaming/Shortizle/{id}/failover",
+            new StringContent("{\"revision\":" + revision + "}", Encoding.UTF8, "application/json"));
+        using var first = await Switch(0);
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
+        Assert.AreEqual("text/plain", first.Content.Headers.ContentType!.MediaType);
+        Assert.IsTrue(first.Headers.CacheControl!.NoStore);
+        var master = await first.Content.ReadAsStringAsync();
+        Assert.AreEqual(address + $"/Streaming/Shortizle/{id}/master.m3u8?revision=1", master);
+        Assert.IsTrue((await http.GetStringAsync(master)).Contains("/b/master.m3u8"));
+        Assert.IsTrue((await http.GetStringAsync(address + $"/Streaming/Shortizle/{id}/master.m3u8")).Contains("/a/master.m3u8"));
+        using var repeated = await Switch(0); Assert.AreEqual(master, await repeated.Content.ReadAsStringAsync());
+        using var exhausted = await Switch(1); Assert.AreEqual(HttpStatusCode.BadGateway, exhausted.StatusCode);
+        Assert.AreEqual("sources_exhausted", JsonNode.Parse(await exhausted.Content.ReadAsStringAsync())!["code"]!.ToString());
+        await app.StopAsync();
+    }
+
+    [TestMethod]
     public async Task RejectsInvalidManifestAndUnsupportedSources()
     {
         using var service = new ShortizleService(() => Client(r => r.RequestUri!.Host == "shortizle.com"
@@ -163,6 +279,58 @@ public sealed class ShortizleTests
         }
         using var paywall = new ShortizleService(() => Client(_ => Response("<script type='application/json' data-page='app'>{\"props\":{\"access_granted\":false}}</script>")));
         await Error("access_denied", () => paywall.ResolveAsync(Episode, default));
+    }
+
+    [TestMethod]
+    public async Task SeparateAudioAndVideoPlaylistsProxyCdnMapsAndByteRanges()
+    {
+        var visited = new List<string>();
+        using var service = new ShortizleService(() => Client(r =>
+        {
+            var uri = r.RequestUri!;
+            visited.Add(uri.AbsoluteUri);
+            if (uri.Host == "shortizle.com") return Response(Page("[{\"url\":\"" + Master + "\"}]"));
+            if (uri.AbsolutePath == "/media/master.m3u8")
+                return Response("#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"Original\",DEFAULT=YES,URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,CODECS=\"avc1.64001f,mp4a.40.2\",AUDIO=\"aud\"\nvideo.m3u8\n");
+            if (uri.AbsolutePath.EndsWith(".m3u8"))
+            {
+                var track = uri.AbsolutePath.Contains("audio") ? "audio-en-original" : "video";
+                var redirect = Response("", status: HttpStatusCode.Redirect);
+                redirect.Headers.Location = new Uri($"https://media.mybigdramapool.com/v1/drama/{track}/index");
+                return redirect;
+            }
+            if (uri.AbsolutePath.EndsWith("/index"))
+                return Response("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-BYTERANGE:3@2\n#EXTINF:1,\nmedia.m4s?v=fixture\n", "application/vnd.apple.mpegurl");
+            Assert.AreEqual("media.mybigdramapool.com", uri.Host);
+            if (uri.AbsolutePath.EndsWith("init.mp4")) return Response("init", "video/mp4");
+            Assert.AreEqual("bytes=2-4", r.Headers.Range?.ToString());
+            var response = Response("abc", "video/mp4", HttpStatusCode.PartialContent);
+            response.Content.Headers.TryAddWithoutValidation("Content-Range", "bytes 2-4/10");
+            return response;
+        }));
+        var id = await service.ResolveAsync(Episode, default);
+        using var master = await service.OpenAsync(id, null, null, x => x, default);
+        var text = await new StreamReader(master.Body).ReadToEndAsync();
+        var audio = System.Text.RegularExpressions.Regex.Match(text, "URI=\"([^\"]+)\"").Groups[1].Value;
+        var video = text.Split('\n').Single(line => line.EndsWith(".m3u8"));
+        Assert.AreNotEqual(audio, video);
+        foreach (var playlistId in new[] { audio, video })
+        {
+            using var playlist = await service.OpenAsync(id, playlistId, null, x => x, default);
+            var manifest = await new StreamReader(playlist.Body).ReadToEndAsync();
+            Assert.IsFalse(manifest.Contains("https://"));
+            var initId = System.Text.RegularExpressions.Regex.Match(manifest, "URI=\"([^\"]+)\"").Groups[1].Value;
+            using var init = await service.OpenAsync(id, initId, null, x => x, default);
+            Assert.AreEqual("init", await new StreamReader(init.Body).ReadToEndAsync());
+            var segmentId = manifest.Split('\n').Single(line => line.EndsWith(".m4s"));
+            using var segment = await service.OpenAsync(id, segmentId, "bytes=2-4", x => x, default);
+            Assert.AreEqual(206, segment.Status);
+            Assert.AreEqual("bytes 2-4/10", segment.Headers["Content-Range"]);
+            Assert.AreEqual("abc", await new StreamReader(segment.Body).ReadToEndAsync());
+        }
+        Assert.IsTrue(visited.Any(url => url.Contains("/audio-en-original/media.m4s?v=fixture")));
+        Assert.IsTrue(visited.Any(url => url.Contains("/video/media.m4s?v=fixture")));
+        await Error("invalid_upstream", () => { ShortizleHttp.Validate(new Uri("https://media.mybigdramapool.com.evil.test/video")); return Task.CompletedTask; });
     }
 
     [TestMethod]

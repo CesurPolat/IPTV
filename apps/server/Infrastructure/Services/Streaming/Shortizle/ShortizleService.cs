@@ -9,6 +9,7 @@ namespace Infrastructure.Services.Streaming.Shortizle;
 public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, IDisposable
 {
     private sealed record Resource(Uri Uri, bool Manifest);
+    private sealed record MasterSnapshot(Resource Resource, DateTimeOffset? Expires);
     private sealed class Session(HttpClient client, Uri episode) : IDisposable
     {
         public HttpClient Client { get; } = client;
@@ -17,6 +18,10 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         public DateTimeOffset? Expires { get; set; }
         public DateTimeOffset LastUsed { get; set; } = DateTimeOffset.UtcNow;
         public string SourceKey { get; set; } = "";
+        public string SourceGroup { get; set; } = "";
+        public int Revision { get; set; }
+        public Dictionary<int, MasterSnapshot> Masters { get; } = new();
+        public HashSet<string> FailedSources { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, Resource> Resources { get; } = new();
         public Dictionary<Resource, string> ResourceIds { get; } = new();
         public SemaphoreSlim Gate { get; } = new(1, 1);
@@ -49,6 +54,7 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         try
         {
             await ResolveSession(session, false, cancellationToken);
+            session.Masters[0] = new(session.Master, session.Expires);
             session.LastUsed = _time.GetUtcNow();
             var id = Guid.NewGuid().ToString("N");
             _sessions[id] = session;
@@ -135,7 +141,7 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         throw new ShortizleException(502, "invalid_response", "Kaynak süre bilgisi geçersiz.");
     }
 
-    private async Task ResolveSession(Session session, bool refresh, CancellationToken ct)
+    private async Task ResolveSession(Session session, bool refresh, CancellationToken ct, bool fallback = false, int? sourceNumber = null)
     {
         using var page = await ShortizleHttp.SendAsync(session.Client, session.Episode, ct);
         ShortizleHttp.EnsureSuccess(page);
@@ -144,38 +150,78 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
             throw new ShortizleException(403, "access_denied", "Bu bölüm için giriş veya abonelik gerekiyor.");
         ShortizleException? lastError = null;
         var index = 0;
-        foreach (var source in ShortizleParser.Sources(props))
+        var groupIndex = 0;
+        foreach (var candidate in ShortizleParser.Candidates(props))
         {
+            var source = candidate.Source;
             var resolver = Str(source, "resolve_url");
-            var key = source["id"]?.ToString() ?? (resolver == null
-                ? new Uri(session.Episode, Str(source, "url") ?? $"/unknown/{index}").GetLeftPart(UriPartial.Path)
-                : ResolverUri(session, resolver).AbsolutePath);
+            var identity = resolver ?? Str(source, "url") ?? $"/unknown/{index}";
+            var key = candidate.Group + ":" + (source["id"]?.ToString() ??
+                (Uri.TryCreate(session.Episode, identity, out var sourceUri) ? sourceUri.GetLeftPart(UriPartial.Path) : identity.Split('?')[0]));
             index++;
+            if (sourceNumber.HasValue) {
+                if (candidate.Group != session.SourceGroup || candidate.Group == "fragman") continue;
+                if (++groupIndex != sourceNumber.Value) continue;
+            }
             if (refresh && key != session.SourceKey) continue;
+            if (candidate.Group == "fragman" || (fallback && (candidate.Group != session.SourceGroup || session.FailedSources.Contains(key)))) continue;
             try
             {
-                var result = await ResolveSource(session, source, ct);
+                using var sourceDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                sourceDeadline.CancelAfter(TimeSpan.FromSeconds(20));
+                var sourceCt = sourceDeadline.Token;
+                var result = await ResolveSource(session, source, sourceCt);
                 var type = Str(result, "type");
                 if (type != null && type != "hls" && type != "native") throw new ShortizleException(502, "unsupported_source", "Kaynak HLS değil.");
                 var url = Str(result, "url") ?? throw new ShortizleException(502, "unsupported_source", "HLS adresi bulunamadı.");
                 var uri = new Uri(session.Episode, url);
-                using var manifest = await ShortizleHttp.SendAsync(session.Client, uri, ct);
+                using var manifest = await ShortizleHttp.SendAsync(session.Client, uri, sourceCt);
                 ShortizleHttp.EnsureSuccess(manifest);
-                ShortizleParser.ValidateManifest(await ShortizleHttp.TextAsync(manifest, ct));
+                ShortizleParser.ValidateManifest(await ShortizleHttp.TextAsync(manifest, sourceCt));
                 var expires = Expiry(result);
                 if (expires <= _time.GetUtcNow().AddSeconds(60)) throw new ShortizleException(502, "expired_source", "Kaynak süresi yetersiz.");
                 session.Master = new Resource(uri, true);
                 session.Expires = expires;
                 session.SourceKey = key;
+                session.SourceGroup = candidate.Group;
                 return;
             }
-            catch (ShortizleException ex) { lastError = ex; if (ex.Status is 401 or 403) throw; }
+            catch (ShortizleException ex) { lastError = ex; if (ex.Status is 401 or 403) throw; if (fallback) session.FailedSources.Add(key); }
+            catch (HttpRequestException) { lastError = new ShortizleException(502, "source_unavailable", "Kaynağa erişilemedi."); if (fallback) session.FailedSources.Add(key); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            { lastError = new ShortizleException(504, "source_timeout", "Kaynak zaman aşımına uğradı."); if (fallback) session.FailedSources.Add(key); }
+            catch (Exception ex) when (ex is IOException or DecoderFallbackException or UriFormatException)
+            { lastError = new ShortizleException(502, "invalid_response", "Kaynak yanıtı geçersiz."); if (fallback) session.FailedSources.Add(key); }
         }
+        if (sourceNumber.HasValue) throw lastError ?? new ShortizleException(404, "source_not_found", "Bu numarada kaynak bulunamadı.");
+        if (fallback) throw new ShortizleException(502, "sources_exhausted", "Aynı dilde çalışan başka kaynak bulunamadı. Bölüm listesinden tekrar açabilirsiniz.");
         throw lastError ?? new ShortizleException(502, "unsupported_source", "Kullanılabilir HLS kaynağı bulunamadı.");
     }
 
+    public async Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null)
+    {
+        if (revision < 0) throw new ShortizleException(400, "invalid_revision", "Kaynak sürümü geçersiz.");
+        if (sourceNumber is < 1) throw new ShortizleException(400, "invalid_source", "Kaynak numarası geçersiz.");
+        if (!_sessions.TryGetValue(sessionId, out var session)) throw Gone();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(90));
+        await session.Gate.WaitAsync(deadline.Token);
+        try
+        {
+            if (session.LastUsed < _time.GetUtcNow().AddMinutes(-30)) throw Gone();
+            session.LastUsed = _time.GetUtcNow();
+            if (revision < session.Revision) return session.Revision;
+            if (revision != session.Revision) throw new ShortizleException(409, "invalid_revision", "Kaynak sürümü geçersiz.");
+            if (!sourceNumber.HasValue) session.FailedSources.Add(session.SourceKey);
+            await ResolveSession(session, false, deadline.Token, fallback: !sourceNumber.HasValue, sourceNumber: sourceNumber);
+            session.Masters[++session.Revision] = new(session.Master, session.Expires);
+            return session.Revision;
+        }
+        finally { session.Gate.Release(); }
+    }
+
     public async Task<ShortizleResource> OpenAsync(string sessionId, string? resourceId, string? range,
-        Func<string, string> resourceUrl, CancellationToken cancellationToken)
+        Func<string, string> resourceUrl, CancellationToken cancellationToken, int? revision = null)
     {
         if (!_sessions.TryGetValue(sessionId, out var session)) throw Gone();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -186,10 +232,18 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         {
             if (session.LastUsed < _time.GetUtcNow().AddMinutes(-30)) throw Gone();
             session.LastUsed = _time.GetUtcNow();
-            if (resourceId == null && session.Expires <= _time.GetUtcNow().AddSeconds(60))
+            // Bare master URLs belong to the initial source, even after another request switches.
+            var requestedRevision = revision ?? 0;
+            if (resourceId == null && !session.Masters.ContainsKey(requestedRevision))
+                throw new ShortizleException(400, "invalid_revision", "Kaynak sürümü geçersiz.");
+            if (resourceId == null && requestedRevision == session.Revision && session.Expires <= _time.GetUtcNow().AddSeconds(60)) {
                 await ResolveSession(session, true, cancellationToken);
+                session.Masters[session.Revision] = new(session.Master, session.Expires);
+            }
+            if (resourceId == null && session.Masters[requestedRevision].Expires <= _time.GetUtcNow())
+                throw new ShortizleException(410, "source_expired", "Bu kaynağın süresi doldu; bölümü tekrar açın.");
             // Resource IDs retain their exact upstream URLs across refresh; never remap old segments.
-            var resource = resourceId == null ? session.Master : session.Resources.TryGetValue(resourceId, out var found) ? found
+            var resource = resourceId == null ? session.Masters[requestedRevision].Resource : session.Resources.TryGetValue(resourceId, out var found) ? found
                 : throw new ShortizleException(404, "resource_not_found", "Kaynak bulunamadı.");
             if (range != null && !System.Net.Http.Headers.RangeHeaderValue.TryParse(range, out _))
                 throw new ShortizleException(400, "invalid_range", "Range başlığı geçersiz.");

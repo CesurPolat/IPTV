@@ -7,8 +7,9 @@ public interface IShortizleResolver
 
 public interface IShortizlePlayback
 {
+    Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null);
     Task<ShortizleResource> OpenAsync(string sessionId, string? resourceId, string? range,
-        Func<string, string> resourceUrl, CancellationToken cancellationToken);
+        Func<string, string> resourceUrl, CancellationToken cancellationToken, int? revision = null);
 }
 
 public sealed class ShortizleException(int status, string code, string message) : Exception(message)
