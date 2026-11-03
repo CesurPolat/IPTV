@@ -28,8 +28,11 @@
     .catalog-card { display: flex; img, .poster-placeholder { width: 100px; flex: 0 0 100px; } }
   }
 }
-.archive-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 2rem;
-  button { padding: .7rem 1rem; cursor: pointer; } }
+.archive-load-status {
+  min-height: 64px; margin-top: 2rem; text-align: center; color: #bbb;
+  button { padding: .7rem 1rem; border: 1px solid #666; border-radius: 8px; background: #242424; color: #fff; cursor: pointer; }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+}
 .catalog-page {
   padding: 3rem 2rem;
   color: #fff;

@@ -10,7 +10,13 @@ describe('Shortizle collection screen', () => {
   let fixture: ComponentFixture<SeriesComponent>;
   let params: BehaviorSubject<Record<string, string>>;
   let service: jasmine.SpyObj<TvChannelsService>;
+  let intersect: IntersectionObserverCallback;
+  let observer: jasmine.SpyObj<IntersectionObserver>;
   beforeEach(async () => {
+    observer = jasmine.createSpyObj('IntersectionObserver', ['observe', 'unobserve', 'disconnect']);
+    spyOn(window, 'IntersectionObserver').and.callFake(function(callback: IntersectionObserverCallback) {
+      intersect = callback; return observer;
+    });
     params = new BehaviorSubject<Record<string, string>>({ collections: '1' });
     service = jasmine.createSpyObj('TvChannelsService', ['getShortizleCollections', 'getSeriesDetails', 'getVideoUrl', 'searchShortizle']);
     service.searchShortizle.and.resolveTo({ items: [], page: 1, lastPage: 1, perPage: 30, total: 0, options: { genres: [], platforms: [] } });
@@ -98,13 +104,71 @@ describe('Shortizle collection screen', () => {
     expect(service.getShortizleCollections).toHaveBeenCalledTimes(2);
   });
 
-  it('restores URL filters, displays empty results and disables paging at the boundaries', async () => {
+  it('restores URL filters and displays empty results without pagination buttons', async () => {
     params.next({ archive: '1', q: 'selam', genres: 'aksiyon', platform: 'reelshort', kind: 'dublaj', sort: 'popular', view: 'list' });
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(service.searchShortizle).toHaveBeenCalledWith({ q: 'selam', genres: ['aksiyon'], platform: 'reelshort', kind: 'dublaj', sort: 'popular', view: 'list', page: 1 });
     expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('dizi bulunamadı');
-    const buttons = fixture.nativeElement.querySelectorAll('.archive-pagination button');
-    expect(buttons[0].disabled).toBeTrue(); expect(buttons[1].disabled).toBeTrue();
+    expect(fixture.nativeElement.querySelector('.archive-pagination')).toBeNull();
+    expect(fixture.componentInstance.hasMoreArchive).toBeFalse();
+  });
+
+  const title = (id: string) => ({ id, slug: id, name: id, url: 'https://shortizle.com/icerik/' + id,
+    posterUrl: null, description: null, episodeCount: 1, hasDublaj: true, hasAltyazi: false, isAdult: false });
+  const page = (number: number, ids: string[], lastPage = 3) => ({ items: ids.map(title), page: number, lastPage,
+    perPage: 2, total: 6, options: { genres: [], platforms: [] } });
+
+  it('appends pages on scroll, deduplicates titles and prevents overlapping requests', async () => {
+    params.next({ q: 'submitted' });
+    service.searchShortizle.and.resolveTo(page(1, ['one', 'two']));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    let resolve!: (result: ReturnType<typeof page>) => void;
+    service.searchShortizle.and.returnValue(new Promise(done => resolve = done));
+    fixture.componentInstance.archiveQuery.q = 'unsubmitted edit';
+    intersect([{ isIntersecting: true }] as IntersectionObserverEntry[], observer);
+    intersect([{ isIntersecting: true }] as IntersectionObserverEntry[], observer);
+    expect(service.searchShortizle).toHaveBeenCalledTimes(2);
+    expect(service.searchShortizle.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({ page: 2, q: 'submitted', kind: 'dublaj' }));
+    expect(fixture.componentInstance.isLoading).toBeFalse();
+    resolve(page(2, ['two', 'three'])); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.archiveResult!.items.map(item => item.id)).toEqual(['one', 'two', 'three']);
+    service.searchShortizle.and.resolveTo(page(3, ['four']));
+    intersect([{ isIntersecting: true }] as IntersectionObserverEntry[], observer);
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.hasMoreArchive).toBeFalse();
+    await fixture.componentInstance.loadNextArchivePage();
+    expect(service.searchShortizle).toHaveBeenCalledTimes(3);
+    expect(fixture.nativeElement.textContent).toContain('Tüm sonuçlar gösteriliyor');
+  });
+
+  it('keeps existing results on a next-page failure and retries the same page', async () => {
+    params.next({}); service.searchShortizle.and.resolveTo(page(1, ['one']));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    service.searchShortizle.and.rejectWith(new Error('offline'));
+    await fixture.componentInstance.loadNextArchivePage(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.catalog-card').textContent).toContain('one');
+    expect(fixture.componentInstance.archiveResult!.page).toBe(1);
+    expect(fixture.componentInstance.loadMoreError).toBeTruthy();
+    service.searchShortizle.and.resolveTo(page(2, ['two']));
+    fixture.nativeElement.querySelector('.archive-load-status button').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(service.searchShortizle.calls.mostRecent().args[0].page).toBe(2);
+    expect(fixture.componentInstance.archiveResult!.items.length).toBe(2);
+    expect(fixture.componentInstance.loadMoreError).toBe('');
+  });
+
+  it('discards a pending older page after filters change and disconnects on exit', async () => {
+    params.next({ q: 'old' }); service.searchShortizle.and.resolveTo(page(1, ['old']));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    let resolve!: (result: ReturnType<typeof page>) => void;
+    service.searchShortizle.and.returnValue(new Promise(done => resolve = done));
+    const pending = fixture.componentInstance.loadNextArchivePage();
+    service.searchShortizle.and.resolveTo(page(1, ['new']));
+    params.next({ q: 'new' });
+    resolve(page(2, ['stale'])); await pending; await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.archiveResult!.items.map(item => item.id)).toEqual(['new']);
+    expect(fixture.componentInstance.loadingMore).toBeFalse();
+    fixture.destroy(); expect(observer.disconnect).toHaveBeenCalled();
   });
 
   it('resets paging when submitting edited filters and preserves filters for the next page', async () => {

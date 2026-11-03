@@ -46,7 +46,7 @@
 </section>
 
 <section class="catalog-page" *ngIf="!seriesUrl && archiveMode && !isLoading && !error && archiveResult">
-  <header><h1>Dizi arama</h1><p>{{archiveResult.total}} sonuç · Sayfa {{archiveResult.page}} / {{archiveResult.lastPage}}</p></header>
+  <header><h1>Dizi arama</h1><p>{{archiveResult.total}} sonuç · {{archiveResult.items.length}} dizi gösteriliyor</p></header>
   <div class="archive-results" [class.list-view]="archiveQuery.view === 'list'">
     <a class="catalog-card" *ngFor="let title of archiveResult.items; let col = index" #catalogCard
        [routerLink]="['/series']" [queryParams]="{url: title.url}" [class.active]="activeTitleIndex === col"
@@ -60,11 +60,14 @@
     </a>
   </div>
   <p *ngIf="!archiveResult.items.length" role="status">Bu filtrelerle dizi bulunamadı.</p>
-  <nav class="archive-pagination" aria-label="Arama sayfaları">
-    <button (click)="searchArchive(archiveResult.page - 1)" [disabled]="archiveResult.page <= 1">Önceki</button>
-    <span>{{archiveResult.page}} / {{archiveResult.lastPage}}</span>
-    <button (click)="searchArchive(archiveResult.page + 1)" [disabled]="archiveResult.page >= archiveResult.lastPage">Sonraki</button>
-  </nav>
+  <div #archiveSentinel class="archive-load-status" aria-live="polite" [attr.aria-busy]="loadingMore">
+    <p *ngIf="loadingMore" role="status">Diğer diziler yükleniyor...</p>
+    <div *ngIf="loadMoreError" role="alert">
+      <p>{{loadMoreError}}</p>
+      <button #resultsAction type="button" (click)="loadNextArchivePage()">Tekrar dene</button>
+    </div>
+    <p *ngIf="!hasMoreArchive && archiveResult.items.length">Tüm sonuçlar gösteriliyor.</p>
+  </div>
 </section>
 
 <div class="catalog-error" *ngIf="!isLoading && error" role="alert">

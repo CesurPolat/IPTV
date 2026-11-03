@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ViewChildren, QueryList, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ViewChild, ViewChildren, QueryList, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -46,6 +46,25 @@ export class SeriesComponent implements OnInit, OnDestroy {
   activeTitleIndex = 0;
   private routeSubscription?: Subscription;
   private loadVersion = 0;
+  loadingMore = false;
+  loadMoreError = '';
+  private archiveEnded = false;
+  private loadedArchiveQuery?: ShortizleSearchQuery;
+  private archiveObserver?: IntersectionObserver;
+  private archiveSentinel?: HTMLElement;
+  private observeFrame?: number;
+  private destroyed = false;
+
+  @ViewChild('archiveSentinel') set sentinel(ref: ElementRef<HTMLElement> | undefined) {
+    this.archiveObserver?.disconnect();
+    this.archiveSentinel = ref?.nativeElement;
+    if (!this.archiveSentinel || typeof IntersectionObserver === 'undefined') return;
+    this.archiveObserver = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting) && !this.loadMoreError)
+        this.zone.run(() => { void this.loadNextArchivePage(); });
+    }, { rootMargin: '600px 0px' });
+    this.archiveObserver.observe(this.archiveSentinel);
+  }
 
   seriesUrl: string = '';
   seriesData: DizipalSeriesDetail | null = null;
@@ -62,11 +81,16 @@ export class SeriesComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private tvChannelsService: TvChannelsService,
-    private navService: NavigationService
+    private navService: NavigationService,
+    private zone: NgZone
   ) {}
 
   ngOnInit() {
     this.routeSubscription = this.route.queryParams.subscribe(params => {
+      this.archiveObserver?.disconnect();
+      if (this.observeFrame !== undefined) cancelAnimationFrame(this.observeFrame);
+      this.loadingMore = false;
+      this.loadMoreError = '';
       this.seriesUrl = params['url'] || '';
       this.archiveMode = params['collections'] !== '1';
       this.seriesData = null;
@@ -88,7 +112,12 @@ export class SeriesComponent implements OnInit, OnDestroy {
     });
   }
 
-  ngOnDestroy() { this.routeSubscription?.unsubscribe(); this.loadVersion++; }
+  ngOnDestroy() {
+    this.destroyed = true;
+    this.routeSubscription?.unsubscribe(); this.loadVersion++;
+    this.archiveObserver?.disconnect();
+    if (this.observeFrame !== undefined) cancelAnimationFrame(this.observeFrame);
+  }
 
   goBack() {
     this.navService.back(this.seriesUrl || this.archiveMode ? '/series' : '/home');
@@ -124,15 +153,57 @@ export class SeriesComponent implements OnInit, OnDestroy {
     const version = ++this.loadVersion;
     this.isLoading = true;
     this.error = '';
+    this.archiveResult = null;
+    this.loadingMore = false;
+    this.loadMoreError = '';
+    this.archiveEnded = false;
+    this.loadedArchiveQuery = { ...this.archiveQuery, genres: [...(this.archiveQuery.genres || [])] };
     try {
-      const result = await this.tvChannelsService.searchShortizle(this.archiveQuery);
+      const result = await this.tvChannelsService.searchShortizle(this.loadedArchiveQuery);
       if (version !== this.loadVersion) return;
       this.archiveResult = result;
+      this.archiveEnded = result.items.length === 0;
       this.filterOptions = result.options;
       this.activeTitleIndex = this.activeCollectionIndex = 0;
     } catch {
       if (version === this.loadVersion) this.error = 'Dizi araması yapılamadı. Lütfen tekrar deneyin.';
     } finally { if (version === this.loadVersion) this.isLoading = false; }
+  }
+
+  get hasMoreArchive(): boolean {
+    return !!this.archiveResult && !this.archiveEnded && this.archiveResult.page < this.archiveResult.lastPage;
+  }
+
+  async loadNextArchivePage() {
+    if (this.destroyed || this.seriesUrl || !this.archiveMode || this.isLoading || this.loadingMore || !this.hasMoreArchive || !this.loadedArchiveQuery) return;
+    const version = this.loadVersion;
+    const current = this.archiveResult!;
+    const page = current.page + 1;
+    this.loadingMore = true;
+    this.loadMoreError = '';
+    try {
+      // Use submitted filters, not edits that have not been applied yet.
+      const result = await this.tvChannelsService.searchShortizle({ ...this.loadedArchiveQuery, page });
+      if (version !== this.loadVersion) return;
+      if (result.page !== page) throw new Error('Unexpected archive page');
+      const seen = new Set(current.items.map(item => item.url));
+      const additions = result.items.filter(item => {
+        if (seen.has(item.url)) return false;
+        seen.add(item.url); return true;
+      });
+      this.archiveResult = { ...result, items: [...current.items, ...additions] };
+      this.archiveEnded = result.items.length === 0;
+      // Recheck after rendering: short pages may leave the sentinel visible.
+      this.observeFrame = requestAnimationFrame(() => {
+        if (version !== this.loadVersion || !this.archiveSentinel || !this.hasMoreArchive) return;
+        this.archiveObserver?.unobserve(this.archiveSentinel);
+        this.archiveObserver?.observe(this.archiveSentinel);
+      });
+    } catch {
+      if (version === this.loadVersion) this.loadMoreError = 'Diğer diziler yüklenemedi. Tekrar deneyin.';
+    } finally {
+      if (version === this.loadVersion) this.loadingMore = false;
+    }
   }
 
   async fetchSeriesDetails() {
@@ -292,7 +363,15 @@ export class SeriesComponent implements OnInit, OnDestroy {
       case 'ArrowRight': this.activeTitleIndex = Math.min(this.activeTitleIndex + 1, collections[this.activeCollectionIndex].items.length - 1); break;
       case 'ArrowLeft': this.activeTitleIndex = Math.max(0, this.activeTitleIndex - 1); break;
       case 'ArrowDown':
-        if (this.archiveMode) this.activeTitleIndex = Math.min(this.activeTitleIndex + this.archiveColumns(), collections[0].items.length - 1);
+        if (this.archiveMode) {
+          if (this.loadMoreError && this.activeTitleIndex + this.archiveColumns() >= collections[0].items.length) {
+            this.resultsActions?.first?.nativeElement.focus();
+            return;
+          }
+          if (this.activeTitleIndex + this.archiveColumns() >= collections[0].items.length && !this.loadMoreError)
+            void this.loadNextArchivePage();
+          this.activeTitleIndex = Math.min(this.activeTitleIndex + this.archiveColumns(), collections[0].items.length - 1);
+        }
         else this.activeCollectionIndex = Math.min(this.activeCollectionIndex + 1, collections.length - 1);
         break;
       case 'ArrowUp':
