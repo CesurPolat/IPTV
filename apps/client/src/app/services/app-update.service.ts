@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable, InjectionToken } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { Updater } from 'capacitor-web-updater';
+import { Updater, UpdaterPlugin } from 'capacitor-web-updater';
 import { environment } from '../../environments/environment';
 
 export interface AppUpdateState {
@@ -9,12 +9,23 @@ export interface AppUpdateState {
   updateAvailable: boolean;
 }
 
+interface UpdateRelease {
+  version: string;
+  url: string;
+}
+
+export const APP_UPDATER = new InjectionToken<UpdaterPlugin>('APP_UPDATER', {
+  providedIn: 'root', factory: () => Updater
+});
+
 @Injectable({
   providedIn: 'root'
 })
 export class AppUpdateService {
+  constructor(@Inject(APP_UPDATER) private readonly updater: UpdaterPlugin) {}
   private readonly notifiedVersionStorageKey = 'updateNoticeShownForVersion';
   private latestVersionUrl: string | null = null;
+  private applyingUpdate = false;
   private readonly stateSubject = new BehaviorSubject<AppUpdateState>({
     hasChecked: false,
     isChecking: false,
@@ -28,16 +39,17 @@ export class AppUpdateService {
   }
 
   async checkForUpdates(): Promise<AppUpdateState> {
+    this.latestVersionUrl = null;
     this.stateSubject.next({
       ...this.state,
       isChecking: true
     });
 
     try {
-      const latestVersionUrl = await this.getLatestVersionUrl();
-      console.log('Son surum URL:', latestVersionUrl);
+      const release = await this.getLatestRelease();
+      console.log('Son surum URL:', release?.url ?? null);
 
-      if (!latestVersionUrl || this.isCurrentVersion(latestVersionUrl)) {
+      if (!release || this.compareVersions(release.version, environment.version) <= 0) {
         this.latestVersionUrl = null;
         const nextState: AppUpdateState = {
           hasChecked: true,
@@ -48,7 +60,7 @@ export class AppUpdateService {
         return nextState;
       }
 
-      this.latestVersionUrl = latestVersionUrl;
+      this.latestVersionUrl = release.url;
       const nextState: AppUpdateState = {
         hasChecked: true,
         isChecking: false,
@@ -86,80 +98,76 @@ export class AppUpdateService {
   }
 
   async applyUpdate(): Promise<boolean> {
-    if (!this.state.updateAvailable && !this.latestVersionUrl) {
+    if (this.applyingUpdate || this.state.isChecking || !this.state.updateAvailable || !this.latestVersionUrl) {
       return false;
     }
 
+    this.applyingUpdate = true;
     try {
-      const latestVersionUrl = this.latestVersionUrl ?? await this.getLatestVersionUrl();
-      if (!latestVersionUrl) {
+      const result = await this.updater.getVersion({ value: this.latestVersionUrl });
+      if (result?.value !== true) {
+        console.error('Guncelleme indirilemedi veya kurulamadı.');
         return false;
       }
-
-      await Updater.getVersion({ value: latestVersionUrl });
-      document.location.href = 'index.html';
+      this.reloadApp();
       return true;
     } catch (error) {
       console.error('Guncelleme uygulanirken hata olustu:', error);
       return false;
+    } finally {
+      this.applyingUpdate = false;
     }
   }
 
-  private async getLatestVersionUrl(): Promise<string | null> {
-    const versions = await Updater.listVersions();
-    const allVersionUrls = versions.value ?? [];
-    console.log('Mevcut versiyonlar:', allVersionUrls);
-
-    if (allVersionUrls.length === 0) {
-      return null;
-    }
-
-    const sorted = [...allVersionUrls].sort((a, b) =>
-      this.compareVersions(this.extractVersionToken(a), this.extractVersionToken(b))
-    );
-
-    return sorted[sorted.length - 1] ?? null;
+  private reloadApp() {
+    document.location.href = 'index.html';
   }
 
-  private isCurrentVersion(versionUrl: string): boolean {
-    const current = this.extractVersionToken(environment.version);
-    const latest = this.extractVersionToken(versionUrl);
-
-    if (current && latest) {
-      return current === latest;
+  private async getLatestRelease(): Promise<UpdateRelease | null> {
+    const versions = await this.updater.listVersions();
+    const payload: unknown = typeof versions.value === 'string' ? JSON.parse(versions.value) : versions.value;
+    if (!Array.isArray(payload)) throw new Error('Guncelleme listesi gecersiz.');
+    const releases: UpdateRelease[] = [];
+    for (const entry of payload) {
+      try {
+        // Accept legacy URL arrays too, without treating JSON text as characters.
+        const url = new URL(typeof entry === 'string' ? entry : entry?.url);
+        if (url.protocol !== 'https:' || url.username || url.password || !url.pathname.toLowerCase().endsWith('.zip')) continue;
+        const version = typeof entry === 'string'
+          ? decodeURIComponent(url.pathname.split('/').pop()!).replace(/\.zip$/i, '').replace(/_/g, '.')
+          : entry?.version;
+        if (typeof version !== 'string' || !this.versionParts(version)) continue;
+        releases.push({ version, url: url.href });
+      } catch { /* Ignore malformed release entries. */ }
     }
-
-    return versionUrl.includes(environment.version);
-  }
-
-  private extractVersionToken(value: string): string {
-    const decoded = decodeURIComponent(value);
-    const match = decoded.match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/);
-    return match?.[0] ?? decoded;
+    releases.sort((a, b) => this.compareVersions(a.version, b.version));
+    return releases.at(-1) ?? null;
   }
 
   private compareVersions(a: string, b: string): number {
-    const aParts = this.toNumericVersionParts(a);
-    const bParts = this.toNumericVersionParts(b);
-
-    const maxLength = Math.max(aParts.length, bParts.length);
-    for (let i = 0; i < maxLength; i++) {
-      const aValue = aParts[i] ?? 0;
-      const bValue = bParts[i] ?? 0;
-      if (aValue !== bValue) {
-        return aValue - bValue;
-      }
+    const left = this.versionParts(a);
+    const right = this.versionParts(b);
+    if (!left || !right) throw new Error('Surum numarasi gecersiz.');
+    for (let i = 1; i <= 3; i++) {
+      const difference = Number(left[i]) - Number(right[i]);
+      if (difference) return difference;
     }
-
-    return a.localeCompare(b);
+    const aPre = left[4], bPre = right[4];
+    if (!aPre || !bPre) return aPre ? -1 : bPre ? 1 : 0;
+    const aIds = aPre.split('.'), bIds = bPre.split('.');
+    for (let i = 0; i < Math.max(aIds.length, bIds.length); i++) {
+      if (aIds[i] === undefined) return -1;
+      if (bIds[i] === undefined) return 1;
+      if (aIds[i] === bIds[i]) continue;
+      const aNumeric = /^\d+$/.test(aIds[i]), bNumeric = /^\d+$/.test(bIds[i]);
+      if (aNumeric && bNumeric) return Number(aIds[i]) - Number(bIds[i]);
+      if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+      return aIds[i] < bIds[i] ? -1 : 1;
+    }
+    return 0;
   }
 
-  private toNumericVersionParts(version: string): number[] {
-    const numbers = version.match(/\d+/g);
-    if (!numbers) {
-      return [];
-    }
-
-    return numbers.map((value) => Number.parseInt(value, 10));
+  private versionParts(version: string) {
+    return version.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/);
   }
 }
