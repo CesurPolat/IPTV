@@ -1,8 +1,8 @@
 <section class="catalog-tools" *ngIf="!seriesUrl">
-  <div class="filter-heading"><div><span class="filter-eyebrow">SANA GÖRE BİR DİZİ</span><h2>Ne izlemek istersin?</h2></div>
+  <div class="filter-heading" [class.collapsed]="!filtersExpanded"><button #filterToggle class="filter-toggle" type="button" [attr.aria-expanded]="filtersExpanded" aria-controls="series-filters" (focus)="openFiltersOnFocus()" (click)="filtersExpanded = true" (keydown.arrowdown)="filterToggleDown($event)">Filtreler <span aria-hidden="true">{{filtersExpanded ? '▴' : '▾'}}</span></button>
     <p><kbd>↑ ↓ ← →</kbd> Gezin <kbd>Enter</kbd> Seç <kbd>Geri</kbd> Kapat</p>
   </div>
-  <form class="filter-grid" (ngSubmit)="searchArchive()" (keydown)="handleFilterKey($event)" (focusin)="rememberFilterFocus()" aria-label="Dizi arama filtreleri">
+  <form id="series-filters" class="filter-grid" [hidden]="!filtersExpanded" (ngSubmit)="searchArchive()" (keydown)="handleFilterKey($event)" (focusin)="rememberFilterFocus()" aria-label="Dizi arama filtreleri">
     <label class="query-field">Dizi adı<input #filterControl name="q" [(ngModel)]="archiveQuery.q" maxlength="200" placeholder="Bir dizi adı yaz...">
       <span>Enter ile ara · ↓ Filtrelere geç</span>
     </label>

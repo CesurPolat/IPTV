@@ -2,21 +2,21 @@
 button { color: #f5f5f5; font: inherit; cursor: pointer; }
 button:focus { outline: 3px solid #fff; outline-offset: 3px; background: #402026; }
 .filter-trigger {
-  width: 100%; min-height: 84px; padding: 14px 18px; text-align: left;
+  width: 100%; min-height: 52px; padding: 6px 10px; text-align: left;
   border: 1px solid #45454d; border-radius: 12px; background: #202027;
   &.has-selection { border-color: #a83c49; }
   &:focus { outline: 3px solid #fff; outline-offset: 3px; background: #402026; }
 }
-.filter-label { display: block; color: #bfbfc9; font-size: .8rem; margin-bottom: 8px; }
-.filter-value { display: flex; justify-content: space-between; gap: 12px; font-size: 1rem; font-weight: 600; }
+.filter-label { display: block; color: #bfbfc9; font-size: .75rem; margin-bottom: 2px; }
+.filter-value { display: flex; justify-content: space-between; gap: 8px; font-size: .9rem; font-weight: 600; }
 .filter-backdrop { position: fixed; inset: 0; z-index: 20000; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.8); }
-.filter-dialog { width: min(600px, 100%); max-height: 88vh; max-height: 88dvh; display: flex; flex-direction: column; padding: 24px;
+.filter-dialog { width: min(460px, 100%); max-height: 88vh; max-height: 88dvh; display: flex; flex-direction: column; padding: 12px;
   box-sizing: border-box; border: 1px solid #57575f; border-radius: 20px; color: #fff; background: #18181e;
   header { h2 { margin: 8px 0; } p { color: #bfbfc9; margin: 0 0 16px; font-size: .9rem; } }
 }
 .eyebrow { color: #f77988; letter-spacing: .12em; font-size: .7rem; }
 .filter-options { overflow-y: auto; min-height: 0; padding: 6px; display: flex; flex-direction: column; gap: 8px; }
-.filter-option { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 14px 16px;
+.filter-option { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
   border-radius: 9px; border: 1px solid #414149; background: #23232b; text-align: left; font-size: 1rem;
   &.selected { border-color: #e84a60; background: #411e28; }
   &:focus { outline: 3px solid #fff; outline-offset: 1px; }

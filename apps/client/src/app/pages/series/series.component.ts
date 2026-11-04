@@ -29,6 +29,9 @@ interface Season {
   styleUrl: './series.component.scss'
 })
 export class SeriesComponent implements OnInit, OnDestroy {
+  @ViewChild('filterToggle') filterToggle?: ElementRef<HTMLButtonElement>;
+  filtersExpanded = false;
+  private closingFilters = false;
   @ViewChildren('continueCard') continueCards!: QueryList<ElementRef<HTMLButtonElement>>;
   continueWatching: SeriesProgress[] = [];
   continueError = '';
@@ -330,6 +333,14 @@ export class SeriesComponent implements OnInit, OnDestroy {
     if (event.defaultPrevented) return;
     if (event.key === 'Backspace' || event.key === 'Escape') {
       if (event.key === 'Backspace' && (event.target as HTMLElement | null)?.closest?.('input, textarea, [contenteditable="true"]')) return;
+      if (!this.seriesUrl && this.filtersExpanded) {
+        event.preventDefault();
+        this.filtersExpanded = false;
+        this.closingFilters = true;
+        this.filterToggle?.nativeElement.focus();
+        this.closingFilters = false;
+        return;
+      }
       event.preventDefault();
       this.goBack();
       return;
@@ -448,9 +459,25 @@ export class SeriesComponent implements OnInit, OnDestroy {
   }
 
   private focusFilter(index: number) {
+    if (!this.filtersExpanded) {
+      this.filterToggle?.nativeElement.focus();
+      this.filterToggle?.nativeElement.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     const controls = this.controls();
     const target = controls[Math.min(index, controls.length - 1)];
     target?.focus(); target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  openFiltersOnFocus() {
+    if (!this.closingFilters) this.filtersExpanded = true;
+  }
+
+  filterToggleDown(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.filtersExpanded) this.focusFilter(this.lastFilterIndex);
+    else (this.continueCards?.first?.nativeElement || this.catalogCards?.first?.nativeElement || this.resultsActions?.first?.nativeElement)?.focus();
   }
 
   handleFilterKey(event: KeyboardEvent) {

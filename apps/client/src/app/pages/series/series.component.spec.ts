@@ -54,6 +54,7 @@ describe('Shortizle collection screen', () => {
 
   it('moves from filters to results and back using only arrows', async () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.filter-toggle').click(); fixture.detectChanges();
     const input = fixture.nativeElement.querySelector('input[name="q"]'); input.focus();
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     expect(document.activeElement!.closest('app-series-filter')).not.toBeNull();
@@ -67,11 +68,27 @@ describe('Shortizle collection screen', () => {
   it('closes an open filter on Android Back without leaving Movies', async () => {
     const navigation = TestBed.inject(NavigationService); spyOn(navigation, 'back');
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.filter-toggle').click(); fixture.detectChanges();
     fixture.nativeElement.querySelector('app-series-filter button').click(); fixture.detectChanges();
     const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true });
     document.dispatchEvent(event); fixture.detectChanges();
     expect(event.defaultPrevented).toBeTrue(); expect(navigation.back).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('keeps filters collapsed until opened and closes them on Back', async () => {
+    const navigation = TestBed.inject(NavigationService); spyOn(navigation, 'back');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const toggle = fixture.nativeElement.querySelector('.filter-toggle') as HTMLButtonElement;
+    const form = fixture.nativeElement.querySelector('#series-filters') as HTMLFormElement;
+    expect(form.hidden).toBeTrue();
+    toggle.focus(); fixture.detectChanges();
+    expect(form.hidden).toBeFalse();
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    toggle.dispatchEvent(event); fixture.detectChanges();
+    expect(form.hidden).toBeTrue();
+    expect(document.activeElement).toBe(toggle);
+    expect(navigation.back).not.toHaveBeenCalled();
   });
 
   it('handles the Android back event even while loading or showing an error', () => {
