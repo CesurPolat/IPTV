@@ -360,6 +360,19 @@ describe('Automatic next episode', () => {
     }, replaceUrl: true });
   });
 
+  it('applies the manually selected source to the next episode', async () => {
+    sourcePlayer();
+    await component.changeSource();
+    service.getVideoUrl.and.resolveTo(sessionUrl);
+    service.getAlternativeSource.calls.reset();
+    await component.playNextEpisode();
+    expect(service.getAlternativeSource).toHaveBeenCalledWith(sessionUrl, 2);
+    const query = router.navigate.calls.mostRecent().args[1]!.queryParams!;
+    expect(query['episode']).toBe(3);
+    expect(query['selectedSource']).toBe(2);
+    expect(query['manualSource']).toBe('1');
+  });
+
   it('advances into the next available season', async () => {
     params.next({ url: 'current', series, season: '1', episode: '3' });
     await component.playNextEpisode();

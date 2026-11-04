@@ -23,6 +23,20 @@
   </form>
 </section>
 
+<section class="catalog-page continue-page" *ngIf="!seriesUrl && continueWatching.length">
+  <h2>Kaldığın yerden devam</h2>
+  <div class="collection-items">
+    <button type="button" class="catalog-card continue-card" *ngFor="let item of continueWatching; let i = index"
+      #continueCard [disabled]="continueLoading" (click)="resumeSeries(item)" (keydown)="handleContinueKey($event, i)">
+      <img *ngIf="item.image; else continueNoPoster" [src]="item.image" [alt]="item.name" loading="lazy">
+      <ng-template #continueNoPoster><div class="poster-placeholder">{{item.name}}</div></ng-template>
+      <div class="catalog-card-info"><h3>{{item.name}}</h3><p>{{item.season}}. Sezon · {{item.episode}}. Bölüm</p><p>Devam et</p></div>
+    </button>
+  </div>
+  <p *ngIf="continueLoading" role="status">Bölüm açılıyor...</p>
+  <p *ngIf="continueError" role="alert">{{continueError}}</p>
+</section>
+
 <section class="catalog-page" *ngIf="!seriesUrl && !archiveMode && !isLoading && !error && catalog">
   <header><h1>{{catalog.heading}}</h1><p>Shortizle dizilerini keşfet</p></header>
   <section class="collection" *ngFor="let collection of catalog.collections; let row = index">

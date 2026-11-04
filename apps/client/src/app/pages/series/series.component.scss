@@ -206,3 +206,6 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+.continue-page { padding-bottom: 0; }
+.continue-card { padding: 0; text-align: left; font: inherit; cursor: pointer; &:disabled { opacity: .6; cursor: wait; } }

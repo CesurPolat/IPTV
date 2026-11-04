@@ -7,6 +7,7 @@ import { filter, firstValueFrom, take } from 'rxjs';
 import { NavigationService } from './navigation.service';
 import { PlayerComponent } from '../pages/player/player.component';
 import { TvChannelsService } from './tv-channels.service';
+import { SeriesProgressService } from './series-progress.service';
 
 @Component({ standalone: true, template: '' })
 class EmptyPage {}
@@ -65,7 +66,7 @@ describe('App back navigation', () => {
 
   it('handles player back before media is initialized without reloading the app', () => {
     spyOn(navigation, 'back');
-    const player = new PlayerComponent({} as ChangeDetectorRef, {} as ActivatedRoute, navigation, {} as TvChannelsService, router);
+    const player = new PlayerComponent({} as ChangeDetectorRef, {} as ActivatedRoute, navigation, {} as TvChannelsService, router, TestBed.inject(SeriesProgressService));
     const event = new KeyboardEvent('keydown', { key: 'Backspace', cancelable: true });
     player.handleKeyboardEvent(event);
     expect(event.defaultPrevented).toBeTrue();

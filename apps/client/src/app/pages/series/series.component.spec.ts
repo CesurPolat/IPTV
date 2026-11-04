@@ -193,7 +193,8 @@ describe('Shortizle collection screen', () => {
     expect(fixture.nativeElement.textContent).toContain('Bölüm 1');
     await fixture.componentInstance.playEpisode(fixture.componentInstance.seasons[0].episodes[0], 0);
     expect(router.navigate).toHaveBeenCalledWith(['/player'], { queryParams: {
-      url: 'https://api.example/master.m3u8', series: 'https://shortizle.com/icerik/example', season: '1', episode: '1'
+      url: 'https://api.example/master.m3u8', series: 'https://shortizle.com/icerik/example', season: '1', episode: '1',
+      seriesName: 'Example', seriesImage: ''
     } });
   });
 });

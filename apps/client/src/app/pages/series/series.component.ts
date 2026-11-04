@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TvChannelsService, DizipalSeriesDetail, DizipalSeason, DizipalEpisode, ShortizleCatalog, ShortizleSearchQuery, ShortizleSearchResult, ShortizleSearchOptions } from '../../services/tv-channels.service';
 import { NavigationService } from '../../services/navigation.service';
 import { Subscription } from 'rxjs';
+import { SeriesProgress, SeriesProgressService } from '../../services/series-progress.service';
 import { SeriesFilterComponent } from './series-filter.component';
 
 interface Episode {
@@ -28,6 +29,10 @@ interface Season {
   styleUrl: './series.component.scss'
 })
 export class SeriesComponent implements OnInit, OnDestroy {
+  @ViewChildren('continueCard') continueCards!: QueryList<ElementRef<HTMLButtonElement>>;
+  continueWatching: SeriesProgress[] = [];
+  continueError = '';
+  continueLoading = false;
   @ViewChildren('episodeCard') episodeCards!: QueryList<ElementRef>;
   @ViewChildren('seasonTab') seasonTabs!: QueryList<ElementRef>;
   @ViewChildren('catalogCard') catalogCards!: QueryList<ElementRef>;
@@ -82,7 +87,8 @@ export class SeriesComponent implements OnInit, OnDestroy {
     private router: Router,
     private tvChannelsService: TvChannelsService,
     private navService: NavigationService,
-    private zone: NgZone
+    private zone: NgZone,
+    private progress: SeriesProgressService
   ) {}
 
   ngOnInit() {
@@ -92,6 +98,8 @@ export class SeriesComponent implements OnInit, OnDestroy {
       this.loadingMore = false;
       this.loadMoreError = '';
       this.seriesUrl = params['url'] || '';
+      this.continueWatching = this.progress.list();
+      this.continueError = '';
       this.archiveMode = params['collections'] !== '1';
       this.seriesData = null;
       this.playbackError = '';
@@ -269,7 +277,8 @@ export class SeriesComponent implements OnInit, OnDestroy {
       this.isLoading = true;
       const mediaUrl = await this.tvChannelsService.getVideoUrl(episode.source);
       this.router.navigate(['/player'], { queryParams: {
-        url: mediaUrl, series: this.seriesUrl, season: this.selectedSeason?.id, episode: episode.id
+        url: mediaUrl, series: this.seriesUrl, season: this.selectedSeason?.id, episode: episode.id,
+        seriesName: this.seriesData?.name || '', seriesImage: this.seriesData?.image || ''
       } });
     } catch (error) {
       console.error('Error playing episode:', error);
@@ -277,6 +286,41 @@ export class SeriesComponent implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  async resumeSeries(item: SeriesProgress) {
+    if (this.continueLoading) return;
+    this.continueLoading = true;
+    this.continueError = '';
+    try {
+      const detail = await this.tvChannelsService.getSeriesDetails(item.series);
+      const seasons = detail ? (Array.isArray(detail.containsSeason) ? detail.containsSeason : detail.containsSeason ? [detail.containsSeason] : []) : [];
+      const season = seasons.find(s => s.seasonNumber === item.season);
+      const episodes = season ? (Array.isArray(season.episode) ? season.episode : season.episode ? [season.episode] : []) : [];
+      const episode = episodes.find(e => e.episodeNumber === item.episode);
+      if (!episode?.url) throw new Error('Kayıtlı bölüm bulunamadı. Dizi listesinden başka bir bölüm seçebilirsiniz.');
+      let url = await this.tvChannelsService.getVideoUrl(episode.url);
+      if (item.source && Number.isSafeInteger(item.source) && item.source > 0) url = await this.tvChannelsService.getAlternativeSource(url, item.source);
+      if (this.destroyed) return;
+      const navigated = await this.router.navigate(['/player'], { queryParams: {
+        url, series: item.series, season: item.season, episode: item.episode,
+        seriesName: detail?.name || item.name, seriesImage: detail?.image || item.image,
+        ...(item.source ? { manualSource: '1', selectedSource: item.source } : {})
+      } });
+      if (!navigated) throw new Error('Bölüm açılamadı.');
+    } catch (error) {
+      if (!this.destroyed) this.continueError = error instanceof Error ? error.message : 'Bölüm açılamadı. Lütfen tekrar deneyin.';
+    } finally { this.continueLoading = false; }
+  }
+
+  handleContinueKey(event: KeyboardEvent, index: number) {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      const next = Math.max(0, Math.min(this.continueWatching.length - 1, index + (event.key === 'ArrowRight' ? 1 : -1)));
+      this.continueCards.toArray()[next]?.nativeElement.focus();
+    } else if (event.key === 'ArrowUp') this.focusFilter(this.lastFilterIndex);
+    else (this.catalogCards?.first?.nativeElement || this.resultsActions?.first?.nativeElement)?.focus();
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -376,7 +420,7 @@ export class SeriesComponent implements OnInit, OnDestroy {
         break;
       case 'ArrowUp':
         if ((this.archiveMode && this.activeTitleIndex < this.archiveColumns()) || (!this.archiveMode && this.activeCollectionIndex === 0)) {
-          this.focusFilter(this.lastFilterIndex); return;
+          if (this.continueCards?.first) this.continueCards.first.nativeElement.focus(); else this.focusFilter(this.lastFilterIndex); return;
         }
         if (this.archiveMode) this.activeTitleIndex = Math.max(0, this.activeTitleIndex - this.archiveColumns());
         else this.activeCollectionIndex = Math.max(0, this.activeCollectionIndex - 1);
@@ -429,7 +473,7 @@ export class SeriesComponent implements OnInit, OnDestroy {
     }).filter(candidate => candidate.distance > 5).sort((a, b) => a.score - b.score);
     if (candidates.length) this.focusFilter(candidates[0].i);
     else if (event.key === 'ArrowDown') {
-      const target = this.catalogCards?.first?.nativeElement || this.resultsActions?.find(action => !action.nativeElement.disabled)?.nativeElement;
+      const target = this.continueCards?.first?.nativeElement || this.catalogCards?.first?.nativeElement || this.resultsActions?.find(action => !action.nativeElement.disabled)?.nativeElement;
       target?.focus(); target?.scrollIntoView({ block: 'nearest' });
     }
   }

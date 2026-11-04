@@ -6,6 +6,7 @@ import Hls from 'hls.js';
 import { NavigationService } from '../../services/navigation.service';
 import { TvChannelsService } from '../../services/tv-channels.service';
 import { Subscription } from 'rxjs';
+import { SeriesProgressService } from '../../services/series-progress.service';
 
 type HlsResponseHook = (request: { uri?: string; url?: string; status?: number; aborted?: boolean },
   error: unknown, response?: { statusCode?: number; status?: number }) => void;
@@ -43,6 +44,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private playbackParams: Record<string, any> = {};
   private hlsXhr?: HlsXhr;
   private hlsResponseHook?: HlsResponseHook;
+  seriesName = '';
+  private seriesImage = '';
+  private episodeCompleted = false;
+  private lastProgressSave = 0;
   private seriesUrl = '';
   private seasonNumber = 0;
   private episodeNumber = 0;
@@ -57,7 +62,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     private route: ActivatedRoute,
     private navService: NavigationService,
     private tvChannelsService: TvChannelsService,
-    private router: Router
+    private router: Router,
+    private progress: SeriesProgressService
   ) {}
 
   ngAfterViewInit() {
@@ -65,11 +71,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const oldEpisode = `${this.seriesUrl}:${this.seasonNumber}:${this.episodeNumber}`;
       const oldSession = this.currentUrl.match(/\/Shortizle\/([a-f0-9]{32})\//i)?.[1];
       const newSession = String(params['url'] || '').match(/\/Shortizle\/([a-f0-9]{32})\//i)?.[1];
+      if (this.player && !this.episodeCompleted) this.savePosition();
       this.clearStallTimer();
       this.generation++;
       this.nextEpisodeLoading = false;
       this.nextEpisodeError = '';
       this.seriesUrl = params['series'] || '';
+      this.seriesName = params['seriesName'] || '';
+      this.seriesImage = params['seriesImage'] || '';
+      this.episodeCompleted = false;
+      this.lastProgressSave = 0;
       this.seasonNumber = Number(params['season']) || 0;
       this.episodeNumber = Number(params['episode']) || 0;
       this.playbackParams = params;
@@ -82,7 +93,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.resumeAfterSwitch = undefined;
       }
       const url = params['url'];
-      if (params['manualSource'] === '1') this.manualSource = true;
+      if (params['manualSource'] === '1') {
+        this.manualSource = true;
+        const selected = Number(params['selectedSource']);
+        if (Number.isSafeInteger(selected) && selected > 0) this.selectedSource = selected;
+      }
       if (url) {
         this.initializePlayer(url);
       } else {
@@ -129,11 +144,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const current = episodes.findIndex(e => e.season === this.seasonNumber && e.episodeNumber === this.episodeNumber);
       if (current < 0) throw new Error('Geçerli bölüm dizi listesinde bulunamadı.');
       const next = episodes[current + 1];
-      if (!next) return;
-      const url = await this.tvChannelsService.getVideoUrl(next.url);
+      if (!next) { if (this.episodeCompleted) this.progress.remove(this.seriesUrl); return; }
+      if (this.episodeCompleted && this.seriesName) this.progress.save({ series: this.seriesUrl, name: this.seriesName, image: this.seriesImage, season: next.season, episode: next.episodeNumber, position: 0, updatedAt: Date.now(), ...(this.manualSource && this.sourceNumber ? { source: this.sourceNumber } : {}) });
+      let url = await this.tvChannelsService.getVideoUrl(next.url);
+      if (this.destroyed || generation !== this.generation) return;
+      if (this.manualSource && this.sourceNumber) url = await this.tvChannelsService.getAlternativeSource(url, this.sourceNumber);
       if (this.destroyed || generation !== this.generation) return;
       const navigated = await this.router.navigate(['/player'], { queryParams: {
-        url, series: this.seriesUrl, season: next.season, episode: next.episodeNumber
+        url, series: this.seriesUrl, season: next.season, episode: next.episodeNumber,
+        ...(this.seriesName ? { seriesName: this.seriesName, seriesImage: this.seriesImage } : {}),
+        ...(this.manualSource && this.sourceNumber ? { manualSource: '1', selectedSource: this.sourceNumber } : {})
       }, replaceUrl: true });
       if (!navigated && generation === this.generation) throw new Error('Sonraki bölüme geçilemedi.');
     } catch (error) {
@@ -147,6 +167,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     }
   }
+
+  get seasonNumberLabel(): string { return `${this.seasonNumber}. Sezon ${this.episodeNumber}. Bölüm`; }
 
   get sourceNumber(): number | null {
     if (!this.isShortizleSource()) return null;
@@ -274,7 +296,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!manual && progress !== this.playbackProgress) return;
       this.resumeAfterSwitch = position;
       const navigated = await this.router.navigate(['/player'], { queryParams: {
-        ...this.playbackParams, url, ...(manual ? { manualSource: '1' } : {})
+        ...this.playbackParams, url, ...(manual ? { manualSource: '1', selectedSource: this.selectedSource } : {})
       }, replaceUrl: true });
       if (!navigated) throw new Error('Alternatif kaynağa geçilemedi.');
     } catch (error) {
@@ -290,12 +312,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.player && this.currentUrl) {
       const currentTime = this.player.currentTime();
       if (typeof currentTime !== 'number' || !Number.isFinite(currentTime)) return;
+      if (!this.episodeCompleted && this.seriesUrl && this.seriesName && this.seasonNumber && this.episodeNumber) {
+        const previous = this.progress.get(this.seriesUrl);
+        const position = this.resumeAfterSwitch ?? (currentTime === 0 && !this.hasPlayedVideo && previous?.season === this.seasonNumber && previous.episode === this.episodeNumber ? previous.position : currentTime);
+        this.progress.save({ series: this.seriesUrl, name: this.seriesName, image: this.seriesImage, season: this.seasonNumber, episode: this.episodeNumber, position, updatedAt: Date.now(), ...(this.manualSource && this.sourceNumber ? { source: this.sourceNumber } : {}) });
+      }
+      try {
       // Eğer videonun sonuna çok yakınsa (son 10 saniye), kaldığı yeri temizle ki baştan başlasın
       if (this.duration > 0 && this.duration - currentTime < 10) {
         localStorage.removeItem(`playback_pos_${this.currentUrl}`);
       } else {
         localStorage.setItem(`playback_pos_${this.currentUrl}`, currentTime.toString());
       }
+      } catch { /* Storage is optional. */ }
     }
   }
 
@@ -418,10 +447,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.hls?.destroy();
     this.hls = undefined;
     this.detachHlsResponseHook();
-    if (this.player) {
-      this.savePosition();
-    }
-
     this.currentUrl = url;
     this.hasPlayedVideo = false;
     this.playbackWanted = true;
@@ -454,6 +479,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.clearStallTimer();
       if (this.player.error?.()) return;
       this.isPlaying = false;
+      this.episodeCompleted = true;
       this.savePosition();
       void this.playNextEpisode();
     });
@@ -465,11 +491,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const time = this.player.currentTime();
       if (time > this.currentTime && !this.player.paused() && !this.player.seeking?.() && !this.player.error?.()) this.confirmPlayback();
       this.currentTime = time;
+      if (Date.now() - this.lastProgressSave >= 5000 && time > 0 && !this.player.seeking?.()) { this.savePosition(); this.lastProgressSave = Date.now(); }
       this.cdr.detectChanges();
     });
     this.player.on('loadedmetadata', () => {
       this.duration = this.player.duration();
-      const savedPos = this.resumeAfterSwitch ?? Number(localStorage.getItem(`playback_pos_${this.currentUrl}`));
+      const saved = this.progress.get(this.seriesUrl);
+      let legacyPosition = 0;
+      try { legacyPosition = Number(localStorage.getItem(`playback_pos_${this.currentUrl}`)); } catch { /* Storage is optional. */ }
+      const savedPos = this.resumeAfterSwitch ?? (saved && saved.season === this.seasonNumber && saved.episode === this.episodeNumber ? saved.position : legacyPosition);
       this.resumeAfterSwitch = undefined;
       if (Number.isFinite(savedPos) && savedPos > 0) {
         this.player.currentTime(Number.isFinite(this.duration) ? Math.min(savedPos, Math.max(0, this.duration - 1)) : savedPos);

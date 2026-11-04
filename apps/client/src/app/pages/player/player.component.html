@@ -14,6 +14,8 @@
         </div>
     </div>
 
+    <div class="series-title" *ngIf="seriesName" [class.hidden]="!showControls">{{seriesName}} · {{seasonNumberLabel}}</div>
+
     <div #sourceControl class="source-number" *ngIf="sourceNumber as number" [class.hidden]="!showControls"
          tabindex="0" role="group" aria-label="Kaynak seçimi" aria-describedby="source-keyboard-hint" aria-live="polite" [attr.aria-busy]="sourceLoading">
         <button type="button" class="source-arrow" aria-label="Önceki kaynak" (click)="changeSource(-1)"
