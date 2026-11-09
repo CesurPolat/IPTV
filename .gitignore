@@ -45,6 +45,7 @@ Thumbs.db
 static/nodejs/dist
 
 # Server local configuration and runtime data
+deploy.local.json
 apps/server/IPTVAPI/appsettings.Local.json
 apps/server/**/FileStorage/
 apps/server/**/Recordings/
