@@ -1,0 +1,15 @@
+{
+  "host": "94.73.149.102",
+  "port": 21,
+  "protocol": "ftp",
+  "username": "ftp-user",
+  "api": {
+    "remoteDir": "/api",
+    "iis": true,
+    "offlineWaitSeconds": 3,
+    "exclude": ["appsettings.json", "appsettings.Development.json", "appsettings.Local.json", "web.config"]
+  },
+  "client": {
+    "remoteDir": "/versions"
+  }
+}

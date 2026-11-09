@@ -94,6 +94,68 @@ npm run build:nodejs
 npm run build --workspace=@iptv/client -- --configuration development
 ```
 
+## FTP deployment (Windows)
+
+Copy `deploy.example.json` to `deploy.local.json` and set the FTP host, port,
+username, API directory and client ZIP directory. Paths are absolute inside the
+FTP account (for example `/api` and `/versions`). Keep the local file out of Git.
+Set `protocol` to `ftp`, `ftps` (explicit TLS, normally port 21) or
+`ftps-implicit` (normally port 990). Set `api.iis` to `false` for a server where
+IIS offline handling is not required; the remote host must otherwise arrange
+its own application restart.
+
+```sh
+npm run deploy
+npm run deploy:api
+npm run deploy:client
+npm run deploy -- -DryRun
+npm run deploy:api -- -Force
+```
+
+`deploy` publishes the Release API, uploads changed API files, builds the
+production client and uploads its ZIP. `-DryRun` still builds and packages both
+projects, but never connects to FTP or changes deployment state. `-Force`
+uploads every non-excluded API file. Firebase remains available through
+`npm run deploy:firebase`.
+
+The script reads `IPTV_FTP_PASSWORD` first, then an optional `password` field in
+the ignored `deploy.local.json`, and prompts if neither is set. The local JSON
+stores that optional password as plain text; keep it out of shared files.
+Credentials are passed to curl
+over stdin. Windows PowerShell, `curl.exe`, Node/npm and the .NET SDK are required.
+
+API comparison uses SHA-256 against the last successful deployment on this
+computer, separately for each FTP account and API directory. The first deploy
+uploads every non-excluded file. State and publish artifacts live in ignored
+`dist/deploy/`. Remote files are never deleted. Remote edits are not detected;
+use `-Force` after changing files manually or switching deployment computers.
+Concurrent commands from this checkout are blocked; coordinate deployments
+from other checkouts/computers separately.
+
+By default, API `appsettings*.json` files listed in `api.exclude` are preserved.
+Provision production settings on the server before the first deploy, or adjust
+the explicit exclusion list. Never publish Development or local secrets.
+IIS deploys put `app_offline.htm` in place, wait for shutdown, upload changed
+files and remove the marker on success. A failed upload leaves the API offline
+and keeps the previous hash state: fix the error and rerun. This is not an atomic
+release or automatic rollback. After manually restoring a working release,
+remove `app_offline.htm` to bring it online.
+
+The client ZIP contains the **contents** of `apps/client/dist/iptv/browser`, with
+`index.html` at the archive root. Its filename comes from the production
+`environment.ts` version: `0.8.1` produces `dist/deploy/0_8_1.zip`, uploaded to
+`client.remoteDir/0_8_1.zip`. Update that version before a new client release;
+the current source version is `0.8.0`. The upload uses a `.uploading` suffix and
+renames the completed archive to `.zip`. Use a new version for each release;
+an existing filename is moved to a temporary backup before the completed ZIP
+is renamed into place. A failed rename attempts to restore that backup; after
+success the backup is deleted. Use unique versions so already installed clients
+can recognize new releases.
+Serve the versions directory at the URL expected by the Capacitor updater.
+
+Run the isolated deployment behavior checks (no FTP connection) with
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy.tests.ps1`.
+
 ## Android
 
 ```sh
