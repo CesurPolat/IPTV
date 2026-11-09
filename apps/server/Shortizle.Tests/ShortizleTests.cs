@@ -57,6 +57,23 @@ public sealed class ShortizleTests
     private static string Id(string line) => line.Split('/').Last();
 
     [TestMethod]
+    public async Task PrefersDubbingAndAllowsExplicitLanguageSwitch()
+    {
+        using var service = new ShortizleService(() => Client(request => request.RequestUri == Episode
+            ? Response(Page("{\"altyazi\":[{\"url\":\"https://stream.shortizle.com/sub/master.m3u8\"}],\"dublaj\":[{\"url\":\"https://stream.shortizle.com/tr/master.m3u8\"}]}"))
+            : Response("#EXTM3U\n#EXTINF:10,\nsegment.ts", "application/vnd.apple.mpegurl")));
+        var id = await service.ResolveAsync(Episode, default);
+        var options = await service.GetAudioOptionsAsync(id, default);
+        Assert.AreEqual("dublaj", options.Selected);
+        CollectionAssert.AreEquivalent(new[] { "dublaj", "altyazi" }, options.Groups);
+        Assert.AreEqual(1, await service.SwitchSourceAsync(id, 0, default, 1, "altyazi"));
+        Assert.AreEqual("altyazi", (await service.GetAudioOptionsAsync(id, default)).Selected);
+        await Error("source_not_found", () => service.SwitchSourceAsync(id, 1, default, 2, "dublaj"));
+        Assert.AreEqual("altyazi", (await service.GetAudioOptionsAsync(id, default)).Selected);
+        await Error("invalid_group", () => service.SwitchSourceAsync(id, 1, default, group: "fragman"));
+    }
+
+    [TestMethod]
     public void ParsesBothInertiaFormatsAndOrderedGroups()
     {
         var sources = "{\"dublaj\":[{\"id\":1,\"url\":\"/a\"}],\"altyazi\":[{\"id\":2,\"resolve_url\":\"/b\"}]}";
@@ -533,6 +550,60 @@ public sealed class ShortizleTests
     }
 
     [TestMethod]
+    public async Task NativeGatewayUsesMp4EndpointAndPreservesRanges()
+    {
+        var bytes = Convert.FromHexString("000000186674797069736F6D0000000069736F6D6D703432");
+        using var service = new ShortizleService(() => Client(request =>
+        {
+            if (request.RequestUri!.Host == "shortizle.com")
+                return Response(Page("[{\"gateway_bootstrap\":{\"url\":\"https://stream.shortizle.com/authorize\",\"token\":\"native-test\"}}]"));
+            if (request.RequestUri.AbsolutePath == "/authorize")
+                return Response("{\"type\":\"native\",\"credentialed\":true,\"url\":\"https://stream.shortizle.com/v1/native\"}");
+            var range = request.Headers.Range?.Ranges.Single();
+            var content = range == null ? bytes : bytes.Skip((int)range.From!.Value).Take((int)(range.To!.Value - range.From.Value + 1)).ToArray();
+            var response = new HttpResponseMessage(range == null ? HttpStatusCode.OK : HttpStatusCode.PartialContent)
+                { Content = new ByteArrayContent(content) };
+            response.Content.Headers.ContentType = new("video/mp4");
+            if (range != null) response.Content.Headers.ContentRange = new(range.From!.Value, range.To!.Value, bytes.Length);
+            response.Headers.TryAddWithoutValidation("Accept-Ranges", "bytes");
+            return response;
+        }));
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders(); builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddControllers().AddApplicationPart(typeof(ShortizleController).Assembly);
+        builder.Services.AddSingleton<IShortizleResolver>(service);
+        builder.Services.AddSingleton<IShortizlePlayback>(service);
+        builder.Services.AddKeyedSingleton<IStreamingService, LegacyStub>("Dizipal");
+        builder.Services.AddKeyedSingleton<IStreamingService, LegacyStub>("Roketdizi");
+        await using var app = builder.Build(); app.MapControllers(); await app.StartAsync();
+        var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        global::Application.Helpers.ConfigHelper.APIUrl = address;
+        using var client = new HttpClient();
+        var playback = await client.GetStringAsync(address + "/Streaming/GetMediaUrl?url=" + Uri.EscapeDataString(Episode.AbsoluteUri));
+        Assert.IsTrue(playback.EndsWith("/media.mp4"));
+        using var whole = await client.GetAsync(playback);
+        Assert.AreEqual((long)bytes.Length, whole.Content.Headers.ContentLength);
+        using var request = new HttpRequestMessage(HttpMethod.Get, playback);
+        request.Headers.Range = new(4, 11);
+        using var media = await client.SendAsync(request);
+        Assert.AreEqual(HttpStatusCode.PartialContent, media.StatusCode);
+        Assert.AreEqual("video/mp4", media.Content.Headers.ContentType!.MediaType);
+        Assert.AreEqual(8L, media.Content.Headers.ContentLength);
+        Assert.AreEqual($"bytes 4-11/{bytes.Length}", media.Content.Headers.ContentRange!.ToString());
+        CollectionAssert.AreEqual(bytes[4..12], await media.Content.ReadAsByteArrayAsync());
+        await app.StopAsync();
+    }
+
+    [TestMethod]
+    public async Task RejectsHtmlMasqueradingAsNativeMp4()
+    {
+        using var service = new ShortizleService(() => Client(request => request.RequestUri!.Host == "shortizle.com"
+            ? Response(Page("[{\"type\":\"native\",\"url\":\"https://stream.shortizle.com/v1/fake\"}]"))
+            : Response("<html>Access denied</html>", "video/mp4")));
+        await Error("invalid_media", () => service.ResolveAsync(Episode, default));
+    }
+
+    [TestMethod]
     public async Task LiveHttpPlaybackDecodesVideoFrame()
     {
         if (Environment.GetEnvironmentVariable("SHORTIZLE_LIVE_TEST") != "1") { Assert.Inconclusive("Opt-in live HTTP/ffmpeg check"); return; }
@@ -553,19 +624,21 @@ public sealed class ShortizleTests
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
         global::Application.Helpers.ConfigHelper.APIUrl = address + "/";
         using var client = new HttpClient();
-        var episode = "https://shortizle.com/watch/ustanin-oyunu-rjes/1/1";
+        var episode = Environment.GetEnvironmentVariable("SHORTIZLE_LIVE_EPISODE") ?? "https://shortizle.com/watch/ustanin-oyunu-rjes/1/1";
         using var resolve = await client.GetAsync(address + "/Streaming/GetMediaUrl?url=" + Uri.EscapeDataString(episode));
         var playback = await resolve.Content.ReadAsStringAsync();
         Assert.AreEqual(HttpStatusCode.OK, resolve.StatusCode, playback);
         Assert.AreEqual("text/plain", resolve.Content.Headers.ContentType!.MediaType);
         Assert.IsTrue(playback.StartsWith(address + "/Streaming/Shortizle/"));
-        Assert.IsTrue(playback.EndsWith("/master.m3u8"));
+        Assert.IsTrue(playback.EndsWith("/master.m3u8") || playback.EndsWith("/media.mp4"));
         var start = new System.Diagnostics.ProcessStartInfo("ffmpeg")
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true
         };
         // The upstream gateway legitimately uses extensionless media; the API validates every upstream URL.
-        foreach (var arg in new[] { "-hide_banner", "-loglevel", "error", "-allowed_extensions", "ALL", "-allowed_segment_extensions", "ALL", "-extension_picky", "0", "-rw_timeout", "15000000", "-i", playback, "-map", "0:v:0", "-frames:v", "1", "-an", "-f", "null", "-" }) start.ArgumentList.Add(arg);
+        if (playback.EndsWith("/master.m3u8"))
+            foreach (var arg in new[] { "-allowed_extensions", "ALL", "-allowed_segment_extensions", "ALL", "-extension_picky", "0" }) start.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "-hide_banner", "-loglevel", "error", "-rw_timeout", "15000000", "-i", playback, "-map", "0:v:0", "-frames:v", "1", "-an", "-f", "null", "-" }) start.ArgumentList.Add(arg);
         using var process = System.Diagnostics.Process.Start(start)!;
         var stderr = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));

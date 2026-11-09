@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, NgZone } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone } from '@angular/core';
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
@@ -66,7 +66,7 @@ describe('App back navigation', () => {
 
   it('handles player back before media is initialized without reloading the app', () => {
     spyOn(navigation, 'back');
-    const player = new PlayerComponent({} as ChangeDetectorRef, {} as ActivatedRoute, navigation, {} as TvChannelsService, router, TestBed.inject(SeriesProgressService));
+    const player = new PlayerComponent({} as ChangeDetectorRef, {} as ActivatedRoute, navigation, {} as TvChannelsService, router, TestBed.inject(SeriesProgressService), new ElementRef(document.createElement('div')));
     const event = new KeyboardEvent('keydown', { key: 'Backspace', cancelable: true });
     player.handleKeyboardEvent(event);
     expect(event.defaultPrevented).toBeTrue();

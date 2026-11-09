@@ -22,7 +22,8 @@ describe('Automatic next episode', () => {
   ] };
   beforeEach(async () => {
     params = new BehaviorSubject<Record<string, string>>({ url: 'https://api.example/current.m3u8', series, season: '1', episode: '1' });
-    service = jasmine.createSpyObj('TvChannelsService', ['getSeriesDetails', 'getVideoUrl', 'getAlternativeSource']);
+    service = jasmine.createSpyObj('TvChannelsService', ['getSeriesDetails', 'getVideoUrl', 'getAlternativeSource', 'getAudioOptions']);
+    service.getAudioOptions.and.resolveTo({ selected: 'dublaj', groups: ['dublaj', 'altyazi'] });
     service.getSeriesDetails.and.resolveTo(detail);
     service.getVideoUrl.and.resolveTo('https://api.example/next.m3u8');
     router = jasmine.createSpyObj('Router', ['navigate']); router.navigate.and.resolveTo(true);
@@ -73,6 +74,19 @@ describe('Automatic next episode', () => {
     return { player, xhr, responses, emit: (name: string) => events.get(name)?.() };
   }
 
+  it('plays native Shortizle MP4 directly while retaining audio and source selection', async () => {
+    const { player } = sourcePlayer();
+    const native = sessionUrl.replace('master.m3u8', 'media.mp4');
+    const createHls = spyOn<any>(component, 'createHls');
+    params.next({ url: native, series, season: '1', episode: '1' });
+    expect(player.src).toHaveBeenCalledWith({ src: native, type: 'video/mp4' });
+    expect(createHls).not.toHaveBeenCalled();
+    expect(component.sourceNumber).toBe(1);
+    expect(service.getAudioOptions).toHaveBeenCalledWith(native);
+    await component.changeSource();
+    expect(service.getAlternativeSource).toHaveBeenCalledWith(native, 2);
+  });
+
   it('focuses source controls with Up, switches using either horizontal arrow and returns with Down', fakeAsync(() => {
     const { player } = sourcePlayer();
     fixture.detectChanges();
@@ -103,6 +117,50 @@ describe('Automatic next episode', () => {
     fixture.destroy();
   }));
 
+  it('navigates the TV controls and changes audio options using only arrows', fakeAsync(() => {
+    sourcePlayer(); flushMicrotasks();
+    component.duration = 120;
+    fixture.detectChanges();
+    const key = (target: HTMLElement, name: string) => target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    const play = fixture.nativeElement.querySelector('[data-player-control="play"]') as HTMLElement;
+    key(document.body, 'ArrowDown');
+    expect(document.activeElement).toBe(play);
+    key(play, 'ArrowRight');
+    expect(document.activeElement?.getAttribute('data-player-control')).toBe('rewind');
+    key(document.activeElement as HTMLElement, 'ArrowRight');
+    key(document.activeElement as HTMLElement, 'ArrowRight');
+    expect(document.activeElement?.getAttribute('data-player-control')).toBe('source');
+    key(document.activeElement as HTMLElement, 'ArrowDown');
+    expect(document.activeElement?.getAttribute('data-player-control')).toBe('audio-group');
+    const change = spyOn(component, 'changeAudioGroup');
+    key(document.activeElement as HTMLElement, 'ArrowRight');
+    expect(change).toHaveBeenCalledWith('altyazi');
+    key(document.activeElement as HTMLElement, 'ArrowUp');
+    expect(document.activeElement?.getAttribute('data-player-control')).toBe('source');
+    key(document.activeElement as HTMLElement, 'ArrowUp');
+    expect(document.activeElement?.getAttribute('data-player-control')).toBe('seek');
+    key(document.activeElement as HTMLElement, 'ArrowDown');
+    expect(document.activeElement).toBe(play);
+    fixture.destroy();
+  }));
+
+  it('keeps selectors visible during remote interaction and clamps seeking to the video length', fakeAsync(() => {
+    const { player } = sourcePlayer(); flushMicrotasks();
+    component.duration = 120; component.isPlaying = true;
+    fixture.detectChanges();
+    const source = fixture.nativeElement.querySelector('[data-player-control="source"]') as HTMLElement;
+    source.focus(); component.resetControlsTimer(); tick(3001);
+    expect(component.showControls).toBeTrue();
+    source.blur();
+    component.resetControlsTimer(); tick(3001);
+    expect(component.showControls).toBeFalse();
+    player.currentTime(118); component.seekBy(10);
+    expect(player.currentTime()).toBe(120);
+    player.currentTime(3); component.seekBy(-10);
+    expect(player.currentTime()).toBe(0);
+    fixture.destroy();
+  }));
+
   it('uses HLS.js instead of VHS for real Shortizle video elements and destroys it on exit', () => {
     const { player } = sourcePlayer();
     const media = document.createElement('video');
@@ -111,6 +169,8 @@ describe('Automatic next episode', () => {
     spyOn(Hls, 'isSupported').and.returnValue(true);
     const handlers = new Map<string, (...args: any[]) => void>();
     const hls = jasmine.createSpyObj('Hls', ['on', 'loadSource', 'attachMedia', 'destroy']);
+    hls.audioTracks = [{ lang: 'en', name: 'English' }, { lang: 'tr', name: 'Türkçe' }];
+    hls.audioTrack = 0;
     hls.on.and.callFake((name: string, callback: (...args: any[]) => void) => handlers.set(name, callback));
     spyOn<any>(component, 'createHls').and.returnValue(hls);
     const recover = spyOn(component, 'recoverSource');
@@ -119,6 +179,11 @@ describe('Automatic next episode', () => {
     expect(hls.loadSource).toHaveBeenCalledWith(sessionUrl);
     expect(hls.attachMedia).toHaveBeenCalledWith(media);
     expect(player.src).not.toHaveBeenCalled();
+    handlers.get(Hls.Events.AUDIO_TRACKS_UPDATED)?.();
+    expect(hls.audioTrack).toBe(1);
+    component.changeAudioTrack('0');
+    handlers.get(Hls.Events.AUDIO_TRACK_SWITCHED)?.();
+    expect(hls.audioTrack).toBe(0); // A manual choice must survive track updates.
     handlers.get(Hls.Events.MANIFEST_PARSED)?.();
     expect(media.play).toHaveBeenCalled();
     handlers.get(Hls.Events.ERROR)?.(Hls.Events.ERROR, { fatal: false, details: 'fragLoadError' });
@@ -127,6 +192,33 @@ describe('Automatic next episode', () => {
     expect(recover).toHaveBeenCalledTimes(1);
     fixture.destroy();
     expect(hls.destroy).toHaveBeenCalled();
+  });
+
+  it('prefers Turkish native/VHS audio, respects manual choice and removes listeners', () => {
+    const { player, emit } = sourcePlayer();
+    const tracks: any = [{ language: 'en', label: 'English', enabled: true }, { language: 'tur', label: '', enabled: false }];
+    tracks.addEventListener = jasmine.createSpy();
+    tracks.removeEventListener = jasmine.createSpy();
+    player.audioTracks = () => tracks;
+    emit('loadedmetadata');
+    expect(tracks[1].enabled).toBeTrue();
+    expect(tracks[0].enabled).toBeFalse();
+    component.changeAudioTrack('0');
+    emit('loadedmetadata');
+    expect(tracks[0].enabled).toBeTrue();
+    expect(component.selectedAudioTrack).toBe(0);
+    fixture.destroy();
+    expect(tracks.removeEventListener).toHaveBeenCalledTimes(3);
+  });
+
+  it('switches dubbing groups and resumes at the same position', async () => {
+    const { player, emit } = sourcePlayer();
+    await fixture.whenStable();
+    player.currentTime(42);
+    await component.changeAudioGroup('altyazi');
+    emit('loadedmetadata');
+    expect(service.getAlternativeSource).toHaveBeenCalledWith(sessionUrl, 1, 'altyazi');
+    expect(player.currentTime()).toBe(42);
   });
 
   it('honors a manual switch while playback continues and prevents duplicate requests', async () => {

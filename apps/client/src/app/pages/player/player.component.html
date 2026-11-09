@@ -1,49 +1,301 @@
-<div class="video-container">
-    <div class="video-wrapper">
-        <video id="my-video" class="video-js vjs-default-skin" playsinline>
-        </video>
+<div class="video-container" [class.controls-hidden]="!showControls">
+  <div class="video-wrapper">
+    <video id="my-video" class="video-js vjs-default-skin" playsinline></video>
+  </div>
+
+  <header class="player-header player-chrome">
+    <button
+      #backControl
+      data-player-control="back"
+      class="icon-button back-button"
+      type="button"
+      (click)="goBack()"
+      aria-label="Bölüm listesine geri dön"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m14 6-6 6 6 6" />
+      </svg>
+    </button>
+    <div class="header-label">
+      <span class="brand-mark" aria-hidden="true"></span>ŞİMDİ OYNATILIYOR
     </div>
+    <span class="viewing-mode">İYİ SEYİRLER</span>
+  </header>
 
-    <div class="next-episode-status" *ngIf="nextEpisodeLoading || nextEpisodeError || sourceLoading || sourceError" aria-live="polite">
-        <p *ngIf="sourceLoading">Başka bir kaynak deneniyor...</p>
-        <p *ngIf="sourceError" role="alert">{{sourceError}}</p>
-        <p *ngIf="nextEpisodeLoading">Sonraki bölüm açılıyor...</p>
-        <div *ngIf="nextEpisodeError" role="alert">
-            <p>{{nextEpisodeError}}</p>
-            <button type="button" (click)="playNextEpisode()">Tekrar dene</button>
-        </div>
-    </div>
-
-    <div class="series-title" *ngIf="seriesName" [class.hidden]="!showControls">{{seriesName}} · {{seasonNumberLabel}}</div>
-
-    <div #sourceControl class="source-number" *ngIf="sourceNumber as number" [class.hidden]="!showControls"
-         tabindex="0" role="group" aria-label="Kaynak seçimi" aria-describedby="source-keyboard-hint" aria-live="polite" [attr.aria-busy]="sourceLoading">
-        <button type="button" class="source-arrow" aria-label="Önceki kaynak" (click)="changeSource(-1)"
-                [disabled]="sourceLoading || nextEpisodeLoading || number <= 1">‹</button>
-        <span>Kaynak {{number}}</span>
-        <button type="button" class="source-arrow" aria-label="Sonraki kaynak" (click)="changeSource(1)"
-                [disabled]="sourceLoading || nextEpisodeLoading">›</button>
-        <small id="source-keyboard-hint">← Önceki · → Sonraki · ↓ Videoya dön</small>
-    </div>
-
-    <div class="custom-controls" [class.hidden]="!showControls">
-        <button class="play-pause-btn" (click)="togglePlay()" tabindex="-1">
-            @if (!isPlaying) {
-                <span>▶</span>
-            } @else {
-                <span>⏸</span>
-            }
+  <div
+    class="next-episode-status"
+    *ngIf="
+      nextEpisodeLoading || nextEpisodeError || sourceLoading || sourceError
+    "
+    aria-live="polite"
+  >
+    <span
+      class="status-indicator"
+      *ngIf="sourceLoading || nextEpisodeLoading"
+      aria-hidden="true"
+    ></span>
+    <div>
+      <p *ngIf="sourceLoading">Kaynak hazırlanıyor…</p>
+      <p *ngIf="sourceError" role="alert">{{ sourceError }}</p>
+      <p *ngIf="nextEpisodeLoading">Sonraki bölüm hazırlanıyor…</p>
+      <div *ngIf="nextEpisodeError" role="alert">
+        <p>{{ nextEpisodeError }}</p>
+        <button
+          data-player-control="retry"
+          type="button"
+          (click)="playNextEpisode()"
+        >
+          Tekrar dene
         </button>
-
-        <div class="progress-container">
-            <input type="range" class="seek-bar" 
-                   [value]="currentTime" 
-                   [max]="duration" 
-                   (input)="onSeek($event)"
-                   tabindex="-1">
-            <div class="time-display">
-                {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+
+  <section class="player-dock player-chrome" aria-label="Oynatma kontrolleri">
+    <div class="now-playing">
+      <div class="episode-information">
+        <div class="episode-meta">
+          <span class="content-label">{{
+            canPlayNextEpisode ? "DİZİ" : "VİDEO"
+          }}</span
+          ><span *ngIf="canPlayNextEpisode">{{ seasonNumberLabel }}</span
+          ><span
+            class="meta-separator"
+            *ngIf="selectedAudioGroup"
+            aria-hidden="true"
+            >/</span
+          ><span *ngIf="selectedAudioGroup">{{
+            audioGroupLabel(selectedAudioGroup)
+          }}</span>
+        </div>
+        <h1 class="series-title">{{ seriesName || "Şimdi oynatılıyor" }}</h1>
+      </div>
+      <span class="playback-state"
+        ><span [class.playing]="isPlaying" aria-hidden="true"></span
+        >{{ isPlaying ? "Oynatılıyor" : "Duraklatıldı" }}</span
+      >
+    </div>
+
+    <div class="timeline">
+      <input
+        #seekControl
+        data-player-control="seek"
+        type="range"
+        class="seek-bar"
+        aria-label="Oynatma konumu"
+        min="0"
+        [max]="duration || 0"
+        step="10"
+        [value]="currentTime"
+        [disabled]="!isFiniteDuration"
+        [style.--progress]="progressPercent + '%'"
+        [attr.aria-valuetext]="
+          formatTime(currentTime) + ' / ' + formatTime(duration)
+        "
+        (input)="onSeek($event)"
+      />
+      <div class="timeline-labels">
+        <span
+          ><strong>{{ formatTime(currentTime) }}</strong
+          ><span class="time-divider">/</span>{{ formatTime(duration) }}</span
+        ><span *ngIf="isFiniteDuration" class="remaining-time"
+          >{{ formatTime(duration - currentTime) }} kaldı</span
+        >
+      </div>
+    </div>
+
+    <div class="control-row">
+      <div class="transport-controls" role="group" aria-label="Oynatma">
+        <button
+          #playControl
+          data-player-control="play"
+          class="play-pause-btn"
+          type="button"
+          (click)="togglePlay()"
+          [attr.aria-label]="isPlaying ? 'Duraklat' : 'Oynat'"
+        >
+          <svg
+            *ngIf="!isPlaying"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            class="filled-icon"
+          >
+            <path d="m9 5 11 7-11 7z" />
+          </svg>
+          <svg
+            *ngIf="isPlaying"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            class="filled-icon"
+          >
+            <path d="M7 5h4v14H7zM15 5h4v14h-4z" />
+          </svg>
+        </button>
+        <button
+          data-player-control="rewind"
+          class="icon-button seek-button"
+          type="button"
+          (click)="seekBy(-10)"
+          aria-label="10 saniye geri sar"
+          [disabled]="!isFiniteDuration"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 10a8 8 0 1 1 0 5M4 5v5h5" /></svg
+          ><span>10</span>
+        </button>
+        <button
+          data-player-control="forward"
+          class="icon-button seek-button"
+          type="button"
+          (click)="seekBy(10)"
+          aria-label="10 saniye ileri sar"
+          [disabled]="!isFiniteDuration"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 10a8 8 0 1 0 0 5M20 5v5h-5" /></svg
+          ><span>10</span>
+        </button>
+      </div>
+
+      <div class="stream-controls">
+        <div
+          #sourceControl
+          data-player-control="source"
+          class="source-number option-selector"
+          *ngIf="sourceNumber as number"
+          tabindex="0"
+          role="group"
+          aria-label="Kaynak seçimi"
+          aria-describedby="source-keyboard-hint"
+          [attr.aria-busy]="sourceLoading"
+        >
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Önceki kaynak"
+            (click)="changeSource(-1)"
+            [disabled]="sourceLoading || nextEpisodeLoading || number <= 1"
+          >
+            ‹
+          </button>
+          <div class="option-value">
+            <small>Yayın kaynağı</small><span>Kaynak {{ number }}</span>
+          </div>
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Sonraki kaynak"
+            (click)="changeSource(1)"
+            [disabled]="sourceLoading || nextEpisodeLoading"
+          >
+            ›
+          </button>
+        </div>
+        <div
+          #audioGroupControl
+          data-player-control="audio-group"
+          class="audio-selector option-selector"
+          *ngIf="audioGroups.length > 1"
+          tabindex="0"
+          role="group"
+          aria-label="Dublaj seçimi"
+          [attr.aria-busy]="sourceLoading"
+        >
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Önceki içerik dili"
+            (click)="cycleAudioGroup(-1)"
+            [disabled]="sourceLoading || nextEpisodeLoading"
+          >
+            ‹
+          </button>
+          <div class="option-value">
+            <small>İçerik dili</small
+            ><span>{{ audioGroupLabel(selectedAudioGroup) }}</span>
+          </div>
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Sonraki içerik dili"
+            (click)="cycleAudioGroup(1)"
+            [disabled]="sourceLoading || nextEpisodeLoading"
+          >
+            ›
+          </button>
+        </div>
+        <div
+          #audioTrackControl
+          data-player-control="audio-track"
+          class="audio-selector option-selector"
+          *ngIf="audioTracks.length > 1"
+          tabindex="0"
+          role="group"
+          aria-label="Ses dili"
+        >
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Önceki ses kanalı"
+            (click)="cycleAudioTrack(-1)"
+          >
+            ‹
+          </button>
+          <div class="option-value">
+            <small>Ses kanalı</small><span>{{ selectedAudioTrackLabel }}</span>
+          </div>
+          <button
+            class="option-arrow"
+            type="button"
+            tabindex="-1"
+            aria-label="Sonraki ses kanalı"
+            (click)="cycleAudioTrack(1)"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+      <button
+        *ngIf="canPlayNextEpisode"
+        data-player-control="next"
+        class="next-button"
+        type="button"
+        (click)="playNextEpisode()"
+        [disabled]="sourceLoading || nextEpisodeLoading"
+      >
+        <span>Sonraki bölüm</span
+        ><svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 5 10 7-10 7zM19 5v14" />
+        </svg>
+      </button>
+    </div>
+    <p class="audio-error" *ngIf="audioError" role="alert">{{ audioError }}</p>
+    <div class="remote-guide" aria-hidden="true">
+      <span id="source-keyboard-hint"
+        ><kbd>← →</kbd>
+        {{
+          selectorFocused
+            ? "Seçimi değiştir"
+            : controlFocused
+              ? "Kontroller arasında gezin"
+              : "10 saniye sar"
+        }}</span
+      ><span><kbd>↑ ↓</kbd> Kontroller</span
+      ><span
+        ><kbd>OK</kbd>
+        {{
+          selectorFocused
+            ? "Sonraki seçenek"
+            : controlFocused
+              ? "Seç"
+              : "Oynat / duraklat"
+        }}</span
+      ><span class="back-guide"><kbd>↩</kbd> Geri dön</span>
+    </div>
+  </section>
 </div>

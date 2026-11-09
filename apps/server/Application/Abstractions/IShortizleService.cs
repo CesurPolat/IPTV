@@ -7,10 +7,14 @@ public interface IShortizleResolver
 
 public interface IShortizlePlayback
 {
-    Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null);
+    Task<string> GetPlaybackFileAsync(string sessionId, int revision, CancellationToken cancellationToken);
+    Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null, string? group = null);
+    Task<ShortizleAudioOptions> GetAudioOptionsAsync(string sessionId, CancellationToken cancellationToken);
     Task<ShortizleResource> OpenAsync(string sessionId, string? resourceId, string? range,
         Func<string, string> resourceUrl, CancellationToken cancellationToken, int? revision = null);
 }
+
+public sealed record ShortizleAudioOptions(string Selected, string[] Groups);
 
 public sealed class ShortizleException(int status, string code, string message) : Exception(message)
 {

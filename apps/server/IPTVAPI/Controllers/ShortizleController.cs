@@ -10,15 +10,23 @@ namespace IPTVAPI.Controllers;
 [ShortizleErrors]
 public sealed class ShortizleController(IShortizlePlayback playback) : ControllerBase
 {
-    public sealed record FailoverRequest(int Revision, int? SourceNumber = null);
+    public sealed record FailoverRequest(int Revision, int? SourceNumber = null, string? Group = null);
+
+    [HttpGet("audio")]
+    public async Task<ShortizleAudioOptions> Audio(string sessionId, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "no-store";
+        return await playback.GetAudioOptionsAsync(sessionId, cancellationToken);
+    }
 
     [HttpPost("failover")]
     public async Task<IActionResult> Failover(string sessionId, [FromBody] FailoverRequest request, CancellationToken cancellationToken)
     {
-        var revision = await playback.SwitchSourceAsync(sessionId, request.Revision, cancellationToken, request.SourceNumber);
+        var revision = await playback.SwitchSourceAsync(sessionId, request.Revision, cancellationToken, request.SourceNumber, request.Group);
+        var file = await playback.GetPlaybackFileAsync(sessionId, revision, cancellationToken);
         Response.Headers.CacheControl = "no-store";
         var selection = request.SourceNumber is int number ? $"&source={number}" : "";
-        return Content($"{PlaybackBase(Request)}/Streaming/Shortizle/{sessionId}/master.m3u8?revision={revision}{selection}", "text/plain");
+        return Content($"{PlaybackBase(Request)}/Streaming/Shortizle/{sessionId}/{file}?revision={revision}{selection}", "text/plain");
     }
     // APIUrl is initialized by the existing recorder startup path; it can be empty when recording is disabled.
     internal static string PlaybackBase(HttpRequest request) => string.IsNullOrWhiteSpace(ConfigHelper.APIUrl)
@@ -26,6 +34,9 @@ public sealed class ShortizleController(IShortizlePlayback playback) : Controlle
 
     [HttpGet("master.m3u8")]
     public Task GetMaster(string sessionId, [FromQuery] int? revision = null) => Write(sessionId, null, revision);
+
+    [HttpGet("media.mp4")]
+    public Task GetMedia(string sessionId, [FromQuery] int? revision = null) => Write(sessionId, null, revision);
 
     [HttpGet("resource/{resourceId}")]
     public Task GetResource(string sessionId, string resourceId) => Write(sessionId, resourceId);

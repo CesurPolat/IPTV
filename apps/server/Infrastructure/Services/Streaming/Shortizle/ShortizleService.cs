@@ -19,6 +19,7 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         public DateTimeOffset LastUsed { get; set; } = DateTimeOffset.UtcNow;
         public string SourceKey { get; set; } = "";
         public string SourceGroup { get; set; } = "";
+        public string[] SourceGroups { get; set; } = [];
         public int Revision { get; set; }
         public Dictionary<int, MasterSnapshot> Masters { get; } = new();
         public HashSet<string> FailedSources { get; } = new(StringComparer.Ordinal);
@@ -141,7 +142,7 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         throw new ShortizleException(502, "invalid_response", "Kaynak süre bilgisi geçersiz.");
     }
 
-    private async Task ResolveSession(Session session, bool refresh, CancellationToken ct, bool fallback = false, int? sourceNumber = null)
+    private async Task ResolveSession(Session session, bool refresh, CancellationToken ct, bool fallback = false, int? sourceNumber = null, string? group = null)
     {
         using var page = await ShortizleHttp.SendAsync(session.Client, session.Episode, ct);
         ShortizleHttp.EnsureSuccess(page);
@@ -151,8 +152,12 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         ShortizleException? lastError = null;
         var index = 0;
         var groupIndex = 0;
-        foreach (var candidate in ShortizleParser.Candidates(props))
+        var candidates = ShortizleParser.Candidates(props).ToArray();
+        session.SourceGroups = candidates.Select(c => c.Group).Where(g => g != "fragman").Distinct().ToArray();
+        // Prefer Turkish dubbing regardless of the upstream object's property order.
+        foreach (var candidate in candidates.OrderBy(c => c.Group == "dublaj" ? 0 : 1))
         {
+            if (group != null && candidate.Group != group) continue;
             var source = candidate.Source;
             var resolver = Str(source, "resolve_url");
             var identity = resolver ?? Str(source, "url") ?? $"/unknown/{index}";
@@ -160,7 +165,7 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
                 (Uri.TryCreate(session.Episode, identity, out var sourceUri) ? sourceUri.GetLeftPart(UriPartial.Path) : identity.Split('?')[0]));
             index++;
             if (sourceNumber.HasValue) {
-                if (candidate.Group != session.SourceGroup || candidate.Group == "fragman") continue;
+                if (candidate.Group != (group ?? session.SourceGroup) || candidate.Group == "fragman") continue;
                 if (++groupIndex != sourceNumber.Value) continue;
             }
             if (refresh && key != session.SourceKey) continue;
@@ -172,15 +177,24 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
                 var sourceCt = sourceDeadline.Token;
                 var result = await ResolveSource(session, source, sourceCt);
                 var type = Str(result, "type");
-                if (type != null && type != "hls" && type != "native") throw new ShortizleException(502, "unsupported_source", "Kaynak HLS değil.");
+                if (type != null && type != "hls" && type != "native") throw new ShortizleException(502, "unsupported_source", "Kaynak türü desteklenmiyor.");
                 var url = Str(result, "url") ?? throw new ShortizleException(502, "unsupported_source", "HLS adresi bulunamadı.");
                 var uri = new Uri(session.Episode, url);
-                using var manifest = await ShortizleHttp.SendAsync(session.Client, uri, sourceCt);
+                var isManifest = type != "native";
+                var probeHeaders = isManifest ? null : new Dictionary<string, string> { ["Range"] = "bytes=0-11" };
+                using var manifest = await ShortizleHttp.SendAsync(session.Client, uri, sourceCt, headers: probeHeaders);
                 ShortizleHttp.EnsureSuccess(manifest);
-                ShortizleParser.ValidateManifest(await ShortizleHttp.TextAsync(manifest, sourceCt));
+                if (isManifest) ShortizleParser.ValidateManifest(await ShortizleHttp.TextAsync(manifest, sourceCt));
+                else {
+                    using var body = await ShortizleHttp.DecodeAsync(manifest, sourceCt);
+                    var header = new byte[12];
+                    await body.ReadExactlyAsync(header, sourceCt);
+                    if (!header.AsSpan(4, 4).SequenceEqual("ftyp"u8))
+                        throw new ShortizleException(502, "invalid_media", "Native kaynak geçerli bir MP4 dosyası değil.");
+                }
                 var expires = Expiry(result);
                 if (expires <= _time.GetUtcNow().AddSeconds(60)) throw new ShortizleException(502, "expired_source", "Kaynak süresi yetersiz.");
-                session.Master = new Resource(uri, true);
+                session.Master = new Resource(uri, isManifest);
                 session.Expires = expires;
                 session.SourceKey = key;
                 session.SourceGroup = candidate.Group;
@@ -198,8 +212,9 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
         throw lastError ?? new ShortizleException(502, "unsupported_source", "Kullanılabilir HLS kaynağı bulunamadı.");
     }
 
-    public async Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null)
+    public async Task<int> SwitchSourceAsync(string sessionId, int revision, CancellationToken cancellationToken, int? sourceNumber = null, string? group = null)
     {
+        if (group is not (null or "dublaj" or "altyazi" or "main")) throw new ShortizleException(400, "invalid_group", "Ses dili geçersiz.");
         if (revision < 0) throw new ShortizleException(400, "invalid_revision", "Kaynak sürümü geçersiz.");
         if (sourceNumber is < 1) throw new ShortizleException(400, "invalid_source", "Kaynak numarası geçersiz.");
         if (!_sessions.TryGetValue(sessionId, out var session)) throw Gone();
@@ -212,10 +227,36 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
             session.LastUsed = _time.GetUtcNow();
             if (revision < session.Revision) return session.Revision;
             if (revision != session.Revision) throw new ShortizleException(409, "invalid_revision", "Kaynak sürümü geçersiz.");
-            if (!sourceNumber.HasValue) session.FailedSources.Add(session.SourceKey);
-            await ResolveSession(session, false, deadline.Token, fallback: !sourceNumber.HasValue, sourceNumber: sourceNumber);
+            if (!sourceNumber.HasValue && group == null) session.FailedSources.Add(session.SourceKey);
+            await ResolveSession(session, false, deadline.Token, fallback: !sourceNumber.HasValue && group == null, sourceNumber: sourceNumber, group: group);
             session.Masters[++session.Revision] = new(session.Master, session.Expires);
             return session.Revision;
+        }
+        finally { session.Gate.Release(); }
+    }
+
+    public async Task<string> GetPlaybackFileAsync(string sessionId, int revision, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var session)) throw Gone();
+        await session.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (session.LastUsed < _time.GetUtcNow().AddMinutes(-30)) throw Gone();
+            if (!session.Masters.TryGetValue(revision, out var snapshot))
+                throw new ShortizleException(400, "invalid_revision", "Kaynak sürümü geçersiz.");
+            return snapshot.Resource.Manifest ? "master.m3u8" : "media.mp4";
+        }
+        finally { session.Gate.Release(); }
+    }
+
+    public async Task<ShortizleAudioOptions> GetAudioOptionsAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var session)) throw Gone();
+        await session.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (session.LastUsed < _time.GetUtcNow().AddMinutes(-30)) throw Gone();
+            return new(session.SourceGroup, session.SourceGroups.ToArray());
         }
         finally { session.Gate.Release(); }
     }
@@ -278,6 +319,8 @@ public sealed class ShortizleService : IShortizleResolver, IShortizlePlayback, I
                 if (response.Content.Headers.ContentEncoding.Any(e => e != "identity") && (int)response.StatusCode == 206)
                     throw new ShortizleException(502, "encoded_range", "Sıkıştırılmış byte-range yanıtı desteklenmiyor.");
                 var outputHeaders = new Dictionary<string, string>();
+                if (response.Content.Headers.ContentEncoding.All(encoding => encoding == "identity") && response.Content.Headers.ContentLength is long contentLength)
+                    outputHeaders["Content-Length"] = contentLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 foreach (var name in new[] { "Content-Range", "Accept-Ranges" })
                 {
                     if (response.Content.Headers.TryGetValues(name, out var values) || response.Headers.TryGetValues(name, out values))

@@ -328,14 +328,20 @@ export class TvChannelsService {
     return response.text();
   }
 
-  async getAlternativeSource(playbackUrl: string, sourceNumber?: number): Promise<string> {
+  async getAudioOptions(playbackUrl: string): Promise<{ selected: string; groups: string[] }> {
     const url = new URL(playbackUrl, window.location.origin);
-    const match = url.pathname.match(/\/Streaming\/Shortizle\/([a-f0-9]{32})\/master\.m3u8$/i);
+    const base = url.pathname.replace(/(?:master\.m3u8|media\.mp4)$/i, 'audio');
+    return firstValueFrom(this.http.get<{ selected: string; groups: string[] }>(`${url.origin}${base}`));
+  }
+
+  async getAlternativeSource(playbackUrl: string, sourceNumber?: number, group?: string): Promise<string> {
+    const url = new URL(playbackUrl, window.location.origin);
+    const match = url.pathname.match(/\/Streaming\/Shortizle\/([a-f0-9]{32})\/(?:master\.m3u8|media\.mp4)$/i);
     if (!match) throw new Error('Bu yayın için alternatif kaynak desteği yok.');
     const revision = Number(url.searchParams.get('revision') || 0);
     try {
       return await firstValueFrom(this.http.post(`${TvChannelsService.baseUrl}/Streaming/Shortizle/${match[1]}/failover`,
-        { revision, ...(sourceNumber === undefined ? {} : { sourceNumber }) }, { responseType: 'text' }));
+        { revision, ...(sourceNumber === undefined ? {} : { sourceNumber }), ...(group ? { group } : {}) }, { responseType: 'text' }));
     } catch (error: any) {
       let problem = error?.error;
       if (typeof problem === 'string') { try { problem = JSON.parse(problem); } catch { problem = null; } }

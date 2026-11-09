@@ -11,6 +11,11 @@ import { SeriesProgressService } from '../../services/series-progress.service';
 type HlsResponseHook = (request: { uri?: string; url?: string; status?: number; aborted?: boolean },
   error: unknown, response?: { statusCode?: number; status?: number }) => void;
 type HlsXhr = { onResponse: (hook: HlsResponseHook) => void; offResponse: (hook: HlsResponseHook) => void };
+type AudioTrack = { language?: string; label?: string; enabled: boolean };
+type AudioTrackList = ArrayLike<AudioTrack> & {
+  addEventListener(name: string, listener: () => void): void;
+  removeEventListener(name: string, listener: () => void): void;
+};
 
 @Component({
   selector: 'app-player',
@@ -32,6 +37,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   nextEpisodeError = '';
   sourceLoading = false;
   sourceError = '';
+  audioGroups: string[] = [];
+  selectedAudioGroup = '';
+  audioTracks: { id: number; label: string }[] = [];
+  selectedAudioTrack = -1;
+  audioError = '';
+  private manualAudioTrack = false;
+  private audioTrackList?: AudioTrackList;
+  private readonly audioTrackListener = () => this.refreshAudioTracks();
   private manualSource = false;
   private selectedSource?: number;
   private sourceAttempts = 0;
@@ -63,7 +76,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     private navService: NavigationService,
     private tvChannelsService: TvChannelsService,
     private router: Router,
-    private progress: SeriesProgressService
+    private progress: SeriesProgressService,
+    private host: ElementRef<HTMLElement>
   ) {}
 
   ngAfterViewInit() {
@@ -109,6 +123,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.detachAudioTracks();
     this.hls?.destroy();
     this.hls = undefined;
     this.detachHlsResponseHook();
@@ -170,6 +185,28 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   get seasonNumberLabel(): string { return `${this.seasonNumber}. Sezon ${this.episodeNumber}. Bölüm`; }
 
+  get canPlayNextEpisode(): boolean { return !!(this.seriesUrl && this.seasonNumber && this.episodeNumber); }
+
+  get isFiniteDuration(): boolean { return Number.isFinite(this.duration) && this.duration > 0; }
+
+  get progressPercent(): number {
+    return this.isFiniteDuration ? Math.min(100, Math.max(0, this.currentTime / this.duration * 100)) : 0;
+  }
+
+  get selectedAudioTrackLabel(): string {
+    return this.audioTracks.find(track => track.id === this.selectedAudioTrack)?.label || 'Otomatik';
+  }
+
+  get selectorFocused(): boolean {
+    return document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.option-selector');
+  }
+
+  get controlFocused(): boolean {
+    return document.activeElement instanceof HTMLElement && !!document.activeElement.closest('[data-player-control]');
+  }
+
+  goBack() { this.navService.back('/series'); }
+
   get sourceNumber(): number | null {
     if (!this.isShortizleSource()) return null;
     if (this.selectedSource) return this.selectedSource;
@@ -180,7 +217,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private isShortizleSource() {
-    try { return /\/Streaming\/Shortizle\/[a-f0-9]{32}\/master\.m3u8$/i.test(new URL(this.currentUrl, window.location.origin).pathname); }
+    try { return /\/Streaming\/Shortizle\/[a-f0-9]{32}\/(?:master\.m3u8|media\.mp4)$/i.test(new URL(this.currentUrl, window.location.origin).pathname); }
     catch { return false; }
   }
 
@@ -191,7 +228,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private attachHlsResponseHook() {
-    if (!this.isShortizleSource() || this.destroyed) return;
+    if (!this.isShortizleSource() || this.getVideoType(this.currentUrl) !== 'application/x-mpegURL' || this.destroyed) return;
     const xhr = this.player?.tech?.(true)?.vhs?.xhr as HlsXhr | undefined;
     if (!xhr?.onResponse || xhr === this.hlsXhr) return;
     this.detachHlsResponseHook();
@@ -337,43 +374,85 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       clearTimeout(this.controlsTimeout);
     }
     this.controlsTimeout = setTimeout(() => {
-      if (this.isPlaying) {
+      if (this.isPlaying && !this.selectorFocused && !this.sourceLoading && !this.nextEpisodeLoading) {
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && this.host.nativeElement.contains(focused)) focused.blur();
         this.showControls = false;
         this.cdr.detectChanges();
       }
-    }, 3000); // 3 saniye sonra gizle
+    }, 3000);
     this.cdr.detectChanges();
   }
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
+    // Native selects own their arrow/Enter/Escape keys, including on TV remotes.
+    if (event.target instanceof HTMLElement && event.target.closest('select')) return;
     if (event.key === 'Backspace' || event.key === 'Escape') {
       event.preventDefault();
-      this.navService.back('/series');
+      this.goBack();
       return;
     }
     if (!this.player) return;
 
     const target = event.target instanceof HTMLElement ? event.target : null;
-    const sourceControl = this.sourceControl?.nativeElement;
-    if (sourceControl && target && sourceControl.contains(target)) {
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+    const selector = target?.closest<HTMLElement>('.option-selector');
+    if (selector) {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
+        if (event.key === 'Enter' && target?.closest('button')) return;
         event.preventDefault();
         this.resetControlsTimer();
-        if (event.key === 'ArrowDown') target.blur();
-        else if (['ArrowLeft', 'ArrowRight'].includes(event.key) && !event.repeat)
-          void this.changeSource(event.key === 'ArrowLeft' ? -1 : 1);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          const controls = this.controlRowElements();
+          const index = controls.indexOf(selector);
+          const next = controls[index + (event.key === 'ArrowDown' ? 1 : -1)];
+          if (event.key === 'ArrowUp' && !next?.matches('.option-selector')) this.focusControl('seek', 'play');
+          else if (next) next.focus();
+          else target?.blur();
+        }
+        else if (!event.repeat) {
+          const direction = event.key === 'ArrowLeft' ? -1 : 1;
+          switch (selector.dataset['playerControl']) {
+            case 'source': void this.changeSource(direction); break;
+            case 'audio-group': this.cycleAudioGroup(direction); break;
+            case 'audio-track': this.cycleAudioTrack(direction); break;
+          }
+        }
       }
       return;
     }
+    const control = target?.closest<HTMLElement>('[data-player-control]');
+    if (control && event.key.startsWith('Arrow')) {
+      const name = control.dataset['playerControl'];
+      if (name === 'seek' && ['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      this.resetControlsTimer();
+      if (event.key === 'ArrowUp') this.focusControl(name === 'seek' ? 'back' : 'seek', 'back');
+      else if (event.key === 'ArrowDown') {
+        if (name === 'seek' || name === 'back') this.focusControl('play');
+        else control.blur();
+      } else {
+        const controls = this.controlRowElements();
+        const index = controls.indexOf(control);
+        const next = index + (event.key === 'ArrowLeft' ? -1 : 1);
+        controls[Math.min(controls.length - 1, Math.max(0, next))]?.focus();
+      }
+      return;
+    }
+    const sourceControl = this.sourceControl?.nativeElement;
     if (event.key === 'ArrowUp' && sourceControl) {
       event.preventDefault();
       this.resetControlsTimer();
       sourceControl.focus();
       return;
     }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.focusControl('play');
+      return;
+    }
 
-    if (target?.closest('button, input')) return;
+    if (target?.closest('button, input, select')) return;
 
     this.resetControlsTimer();
 
@@ -386,12 +465,32 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.togglePlay();
         break;
       case 'ArrowRight':
-        this.player.currentTime(this.player.currentTime() + 10);
+        this.seekBy(10);
         break;
       case 'ArrowLeft':
-        this.player.currentTime(Math.max(0, this.player.currentTime() - 10));
+        this.seekBy(-10);
         break;
     }
+  }
+
+  private focusControl(name: string, fallback?: string) {
+    const target = this.host.nativeElement.querySelector<HTMLElement>(`[data-player-control="${name}"]:not(:disabled)`);
+    if (target) target.focus();
+    else if (fallback) this.focusControl(fallback);
+  }
+
+  private controlRowElements(): HTMLElement[] {
+    return Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('.control-row [data-player-control]'))
+      .filter(element => !element.matches(':disabled'));
+  }
+
+  seekBy(seconds: number) {
+    if (!this.player) return;
+    this.resetControlsTimer();
+    const playbackTime = Number(this.player.currentTime());
+    const time = Number.isFinite(playbackTime) ? playbackTime : 0;
+    this.currentTime = Math.min(this.isFiniteDuration ? this.duration : Infinity, Math.max(0, time + seconds));
+    this.player.currentTime(this.currentTime);
   }
 
   togglePlay() {
@@ -411,11 +510,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.player) return;
     this.resetControlsTimer();
     const value = event.target.value;
+    this.currentTime = Number(value);
     this.player.currentTime(value);
   }
 
   formatTime(seconds: number): string {
-    if (!seconds || isNaN(seconds)) return '00:00';
+    if (!Number.isFinite(seconds) || seconds <= 0) return '00:00';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
@@ -444,10 +544,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   initializePlayer(url: string) {
+    this.detachAudioTracks();
+    this.audioGroups = [];
+    this.selectedAudioGroup = '';
+    this.audioTracks = [];
+    this.selectedAudioTrack = -1;
+    this.manualAudioTrack = false;
+    this.audioError = '';
     this.hls?.destroy();
     this.hls = undefined;
     this.detachHlsResponseHook();
     this.currentUrl = url;
+    if (this.isShortizleSource()) void this.loadAudioGroups(url);
     this.hasPlayedVideo = false;
     this.playbackWanted = true;
     this.currentTime = 0;
@@ -462,6 +570,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Reuse the video element: dispose() removes it from the DOM.
       this.player.autoplay(true);
       if (!this.startShortizleHls(url)) this.player.src({ src: url, type });
+      this.bindAudioTracks();
       this.attachHlsResponseHook();
       this.watchForStall();
       return;
@@ -495,6 +604,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.cdr.detectChanges();
     });
     this.player.on('loadedmetadata', () => {
+      this.bindAudioTracks();
       this.duration = this.player.duration();
       const saved = this.progress.get(this.seriesUrl);
       let legacyPosition = 0;
@@ -517,6 +627,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
     // Register the VHS request hook before the first master/child request starts.
     if (!this.startShortizleHls(url)) this.player.src({ src: url, type });
+    this.bindAudioTracks();
     this.attachHlsResponseHook();
     this.watchForStall();
   }
@@ -527,14 +638,127 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return new Hls({ enableWorker: true, maxBufferLength: 30 });
   }
 
+  audioGroupLabel(group: string): string {
+    return group === 'dublaj' ? 'Türkçe dublaj' : group === 'altyazi' ? 'Orijinal / altyazılı' : 'Orijinal';
+  }
+
+  cycleAudioGroup(direction: number) {
+    if (!this.audioGroups.length) return;
+    const index = this.audioGroups.indexOf(this.selectedAudioGroup);
+    const next = index < 0 ? 0 : (index + direction + this.audioGroups.length) % this.audioGroups.length;
+    void this.changeAudioGroup(this.audioGroups[next]);
+  }
+
+  cycleAudioTrack(direction: number) {
+    if (!this.audioTracks.length) return;
+    const index = this.audioTracks.findIndex(track => track.id === this.selectedAudioTrack);
+    const next = index < 0 ? 0 : (index + direction + this.audioTracks.length) % this.audioTracks.length;
+    this.changeAudioTrack(String(this.audioTracks[next].id));
+  }
+
+  private async loadAudioGroups(url: string) {
+    const generation = this.generation;
+    try {
+      const options = await this.tvChannelsService.getAudioOptions(url);
+      if (this.destroyed || generation !== this.generation || url !== this.currentUrl) return;
+      this.audioGroups = options.groups;
+      this.selectedAudioGroup = options.selected;
+      this.cdr.detectChanges();
+    } catch { /* Audio metadata must not interrupt playback. */ }
+  }
+
+  async changeAudioGroup(group: string) {
+    if (!this.audioGroups.includes(group) || group === this.selectedAudioGroup || this.sourceLoading || this.nextEpisodeLoading) return;
+    const generation = this.generation;
+    const position = this.player?.currentTime?.() || this.currentTime;
+    this.sourceLoading = true;
+    this.audioError = '';
+    this.resetControlsTimer();
+    try {
+      const url = await this.tvChannelsService.getAlternativeSource(this.currentUrl, 1, group);
+      if (this.destroyed || generation !== this.generation) return;
+      this.resumeAfterSwitch = position;
+      const navigated = await this.router.navigate(['/player'], { queryParams: {
+        ...this.playbackParams, url, manualSource: null, selectedSource: null
+      }, replaceUrl: true });
+      if (!navigated) throw new Error('Ses dili değiştirilemedi.');
+      this.manualSource = false;
+      this.selectedSource = undefined;
+      this.sourceAttempts = 0;
+    } catch (error) {
+      if (!this.destroyed && generation === this.generation) this.audioError = error instanceof Error ? error.message : 'Ses dili değiştirilemedi.';
+    } finally {
+      if (!this.destroyed && generation === this.generation) {
+        this.sourceLoading = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  private detachAudioTracks() {
+    for (const event of ['addtrack', 'removetrack', 'change']) this.audioTrackList?.removeEventListener(event, this.audioTrackListener);
+    this.audioTrackList = undefined;
+  }
+
+  private bindAudioTracks() {
+    if (this.hls) return;
+    const list = this.player?.audioTracks?.() as AudioTrackList | undefined;
+    if (list && list !== this.audioTrackList) {
+      this.detachAudioTracks();
+      this.audioTrackList = list;
+      for (const event of ['addtrack', 'removetrack', 'change']) list.addEventListener(event, this.audioTrackListener);
+    }
+    this.refreshAudioTracks();
+  }
+
+  private isTurkish(language = '', label = ''): boolean {
+    return /^(tr|tur)([-_]|$)/i.test(language) || /türk|turk|dublaj/i.test(label);
+  }
+
+  private refreshAudioTracks() {
+    if (this.destroyed) return;
+    const tracks = this.hls ? this.hls.audioTracks.map((track, id) => ({ id, language: track.lang, label: track.name }))
+      : Array.from(this.audioTrackList || []).map((track, id) => ({ id, language: track.language, label: track.label }));
+    this.audioTracks = tracks.map(track => ({ id: track.id,
+      label: this.isTurkish(track.language, track.label) ? `Türkçe${track.label ? ' · ' + track.label : ''}` : track.label || track.language || `Ses ${track.id + 1}` }));
+    const selected = this.hls ? this.hls.audioTrack : Array.from(this.audioTrackList || []).findIndex(track => track.enabled);
+    const turkish = tracks.find(track => this.isTurkish(track.language, track.label));
+    this.selectedAudioTrack = selected;
+    if (!this.manualAudioTrack && turkish && selected !== turkish.id) this.setAudioTrack(turkish.id);
+    this.cdr.detectChanges();
+  }
+
+  changeAudioTrack(value: string) {
+    const id = Number(value);
+    if (!this.audioTracks.some(track => track.id === id)) return;
+    this.manualAudioTrack = true;
+    this.setAudioTrack(id);
+    this.resetControlsTimer();
+  }
+
+  private setAudioTrack(id: number) {
+    this.selectedAudioTrack = id;
+    if (this.hls) this.hls.audioTrack = id;
+    else if (this.audioTrackList) {
+      // Enable the requested track first so synchronous change events see it.
+      this.audioTrackList[id].enabled = true;
+      Array.from(this.audioTrackList).forEach((track, index) => { if (index !== id) track.enabled = false; });
+    }
+  }
+
   private startShortizleHls(url: string): boolean {
-    if (!this.isShortizleSource() || !Hls.isSupported()) return false;
+    if (!this.isShortizleSource() || this.getVideoType(url) !== 'application/x-mpegURL' || !Hls.isSupported()) return false;
     const media = this.player?.tech?.(true)?.el?.();
     if (!(media instanceof HTMLVideoElement)) return false;
     const generation = this.generation;
     this.player.error(null);
     const hls = this.createHls();
     this.hls = hls;
+    for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED]) {
+      hls.on(event, () => {
+        if (this.hls === hls && generation === this.generation) this.refreshAudioTracks();
+      });
+    }
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (this.destroyed || generation !== this.generation || this.hls !== hls) return;
       console.warn('[Player] HLS:', { source: this.sourceNumber, details: data.details, fatal: data.fatal });

@@ -12,15 +12,18 @@ namespace IPTVAPI.Controllers
         private readonly IStreamingService _dizipalService;
         private readonly IStreamingService _roketdiziService;
         private readonly IShortizleResolver _shortizle;
+        private readonly IShortizlePlayback _shortizlePlayback;
 
         public StreamingController(
             [FromKeyedServices("Dizipal")] IStreamingService dizipalService, 
             [FromKeyedServices("Roketdizi")] IStreamingService roketdiziService,
-            IShortizleResolver shortizle)
+            IShortizleResolver shortizle,
+            IShortizlePlayback shortizlePlayback)
         {
             _dizipalService = dizipalService;
             _roketdiziService = roketdiziService;
             _shortizle = shortizle;
+            _shortizlePlayback = shortizlePlayback;
         }
 
         [HttpGet]
@@ -34,8 +37,9 @@ namespace IPTVAPI.Controllers
             if (uri.Host.Equals("shortizle.com", StringComparison.OrdinalIgnoreCase))
             {
                 var id = await _shortizle.ResolveAsync(uri, HttpContext.RequestAborted);
+                var file = await _shortizlePlayback.GetPlaybackFileAsync(id, 0, HttpContext.RequestAborted);
                 Response.Headers.CacheControl = "no-store";
-                return Content($"{ShortizleController.PlaybackBase(Request)}/Streaming/Shortizle/{id}/master.m3u8", "text/plain");
+                return Content($"{ShortizleController.PlaybackBase(Request)}/Streaming/Shortizle/{id}/{file}", "text/plain");
             }
             
             // URL'e göre hangi servisin kullanılacağına karar ver
