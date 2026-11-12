@@ -44,6 +44,9 @@ Thumbs.db
 
 static/nodejs/dist
 
+# Firebase Hosting cache
+.firebase/
+
 # Server local configuration and runtime data
 deploy.local.json
 apps/server/IPTVAPI/appsettings.Local.json

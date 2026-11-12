@@ -1,5 +1,5 @@
 {
-  "host": "94.73.149.102",
+  "host": "ftp.example.com",
   "port": 21,
   "protocol": "ftp",
   "username": "ftp-user",
